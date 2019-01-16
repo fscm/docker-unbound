@@ -1,0 +1,253 @@
+#!/bin/bash
+#
+# Shell script to start the Unbound Docker image.
+#
+# Copyright 2016-2019, Frederico Martins
+#   Author: Frederico Martins <http://github.com/fscm>
+#
+# SPDX-License-Identifier: MIT
+#
+# This program is free software. You can use it and/or modify it under the
+# terms of the MIT License.
+#
+
+set -e
+
+BASENAME=$(basename "${0}")
+__TS__=$(date +%Y%m%d%H%M%S)
+
+
+# Variables
+ACTION_HELP=0
+ACTION_INIT=0
+ACTION_START=0
+
+UNBOUND_SERVER_PORT=53
+UNBOUND_SERVER_THREADS=$(nproc --ignore=1)
+UNBOUND_SERVER_SLABS=$(echo "x=l(${UNBOUND_SERVER_THREADS})/l(2); scale=0; 2^((x)/1)" | bc -q -l;)
+
+__UNBOUND_DATA__="/data/unbound"
+
+
+# Configuration files
+UNBOUND_ANCHOR="${__UNBOUND_DATA__}/root.key"
+UNBOUND_CONF="${__UNBOUND_DATA__}/unbound.conf"
+UNBOUND_LOCAL_CONF="${__UNBOUND_DATA__}/local-zone.conf"
+
+
+# Usage
+function show_usage() {
+  echo "Usage: ${BASENAME} [options] (help|init|start)"
+  echo "  help:"
+  echo "    <none>"
+  echo "  init:"
+  echo "    -p <PORT>      The Unbound DNS server port (defaults to 53)."
+  echo "    -s <SLABS>     The Unbound DNS server number of slabs (must be a"
+  echo "                   power of two bellow the 'threads' value)."
+  echo "    -t <THREADS>   The Unbound DNS server number of threads."
+  echo "  start:"
+  echo "    <none>"
+}
+
+
+# Options parsing
+while getopts ":p:s:t:" opt; do
+  case ${opt} in
+    p)
+      UNBOUND_SERVER_PORT=${OPTARG}
+      ;;
+    s)
+      UNBOUND_SERVER_SLABS=${OPTARG}
+      ;;
+    t)
+      UNBOUND_SERVER_THREADS=${OPTARG}
+      ;;
+    \?)
+      echo >&2 "  [ERROR] Invalid option: -${OPTARG}"
+      exit 1
+      ;;
+    :)
+      echo >&2 "  [ERROR] Option -${OPTARG} requires an argument"
+      exit 2
+      ;;
+  esac
+done
+
+shift $((OPTIND-1))
+
+for command in "${@}"; do
+  case "${command,,}" in
+    help)
+      ACTION_HELP=1
+      ;;
+    init)
+      ACTION_INIT=1
+      ;;
+    start)
+      ACTION_START=1
+      ;;
+    *)
+      echo >&2 "  [WARN] Unknown command '${command}'"
+      ;;
+  esac
+done
+
+
+# Check arguments
+if [[ $# -eq 0 ]]; then
+  show_usage
+  exit 3
+fi
+if ! ((ACTION_HELP+ACTION_INIT+ACTION_START)); then
+  show_usage
+  exit 0
+fi
+
+
+# Check permissions
+if [[ $EUID -ne 0 ]]; then
+  echo >&2 "  [ERROR] This script requires privileged access to system files"
+  exit 4
+fi
+
+
+# === HELP ===
+if [[ "${ACTION_HELP}" -gt 0 ]]; then
+  show_usage
+  exit 0
+fi
+
+
+# === INIT ===
+if [[ "${ACTION_INIT}" -gt 0 ]]; then
+
+  # Backup configuration files
+  if [[ -f ${UNBOUND_CONF} ]]; then
+    cp "${UNBOUND_CONF}" "${UNBOUND_CONF}.${__TS__}.bck"
+  fi
+
+  # Generate the configuration file
+  cat > ${UNBOUND_CONF} <<EOF
+include: "${UNBOUND_LOCAL_CONF}"
+server:
+  access-control: 10.0.0.0/8 allow
+  access-control: 127.0.0.0/8 allow
+  access-control: 172.16.0.0/12 allow
+  access-control: 192.168.0.0/16 allow
+  # access-control: ::1 allow
+  # access-control: fc00::/7 allow
+  aggressive-nsec: yes
+  auto-trust-anchor-file: "${UNBOUND_ANCHOR}"
+  cache-max-ttl: 86400
+  cache-min-ttl: 300
+  chroot: "${__UNBOUND_DATA__}"
+  delay-close: 10000
+  directory: "${__UNBOUND_DATA__}"
+  do-daemonize: no
+  do-not-query-localhost: no
+  edns-buffer-size: 1472
+  harden-algo-downgrade: no
+  harden-below-nxdomain: yes
+  harden-dnssec-stripped: yes
+  harden-glue: yes
+  harden-large-queries: yes
+  harden-referral-path: no
+  harden-short-bufsize: yes
+  hide-identity: yes
+  hide-version: yes
+  infra-cache-slabs: ${UNBOUND_SERVER_SLABS}
+  interface: 0.0.0.0
+  # interface: ::0
+  key-cache-slabs: ${UNBOUND_SERVER_SLABS}
+  log-local-actions: no
+  log-queries: no
+  log-replies: no
+  log-servfail: no
+  logfile: ""
+  minimal-responses: yes
+  msg-cache-size: 4m
+  msg-cache-slabs: ${UNBOUND_SERVER_SLABS}
+  neg-cache-size: 4m
+  num-queries-per-thread: 4096
+  num-threads: ${UNBOUND_SERVER_THREADS}
+  port: ${UNBOUND_SERVER_PORT}
+  prefetch: yes
+  prefetch-key: yes
+  private-address: 10.0.0.0/8
+  private-address: 169.254.0.0/16
+  private-address: 172.16.0.0/12
+  private-address: 192.168.0.0/16
+  # private-address: fd00::/8
+  # private-address: fe80::/10
+  # private-address: ::ffff:0:0/96
+  qname-minimisation: yes
+  ratelimit: 1000
+  rrset-cache-size: 4m
+  rrset-cache-slabs: ${UNBOUND_SERVER_SLABS}
+  rrset-roundrobin: yes
+  serve-expired: yes
+  so-rcvbuf: 0
+  so-reuseport: yes
+  so-sndbuf: 0
+  tls-cert-bundle: "/etc/ssl/certs/ca-certificates.crt"
+  unwanted-reply-threshold: 10000
+  use-caps-for-id: yes
+  username: ""
+  val-clean-additional: yes
+  verbosity: 1
+remote-control:
+  control-enable: no
+forward-zone:
+  name: "."
+  forward-addr: 1.1.1.1@53#one.one.one.one
+  forward-addr: 8.8.8.8@53#dns.google
+  forward-addr: 9.9.9.9@53#dns.quad9.net
+  forward-addr: 1.0.0.1@53#one.one.one.one
+  forward-addr: 8.8.4.4@53#dns.google
+  forward-addr: 149.112.112.112@53#dns.quad9.net
+  # forward-tls-upstream: yes
+  # forward-addr: 1.1.1.1@853#one.one.one.one
+  # forward-addr: 8.8.8.8@853#dns.google
+  # forward-addr: 9.9.9.9@853#dns.quad9.net
+  # forward-addr: 1.0.0.1@853#one.one.one.one
+  # forward-addr: 8.8.4.4@853#dns.google
+  # forward-addr: 149.112.112.112@853#dns.quad9.net
+EOF
+
+  # Clean up unneeded backups
+  diff -q "${UNBOUND_CONF}" "${UNBOUND_CONF}.${__TS__}.bck" &> /dev/null && rm -f "${UNBOUND_CONF}.${__TS__}.bck" || true
+
+  # Generate the local configuration file
+  if ! [[ -f "${UNBOUND_LOCAL_CONF}" ]]; then
+    echo "#local-data: \"example.local. A 192.168.1.1\"" > "${UNBOUND_LOCAL_CONF}"
+  fi
+
+  # Generate the anchor file
+  if ! [[ -f "${UNBOUND_ANCHOR}" ]]; then
+    /sbin/unbound-anchor -a "${UNBOUND_ANCHOR}" || echo "  [INFO] Root trust anchor file created."
+  fi
+
+  # All done
+  echo "  [INFO] Configuration(s) successfully updated."
+fi
+
+
+# === START ===
+if [[ "${ACTION_START}" -gt 0 ]]; then
+
+  # Create temporary dir (if needed)
+  if ! [[ -d /tmp ]]; then
+    mkdir -m 1777 /tmp
+  fi
+
+  # Start the Unbound DNS server
+  if [[ -f "${UNBOUND_CONF}" ]]; then
+    /sbin/unbound -d -p -c "${UNBOUND_CONF}"
+  else
+    echo >&2 "  [ERROR] Unbound DNS configuration not found."
+    exit 5
+  fi
+fi
+
+# All done
+exit 0
