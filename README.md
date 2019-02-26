@@ -8,7 +8,7 @@ This script will create a Docker image with Unbound installed and with all
 of the required initialisation scripts.
 
 The Docker image resulting from this script should be the one used to
-instantiate a Unbound server.
+instantiate an Unbound server.
 
 ## Getting Started
 
@@ -44,8 +44,8 @@ A build example:
 docker build --squash --force-rm --no-cache --quiet --tag johndoe/my_unbound:latest .
 ```
 
-To clean the _<none>_ image left by the `--squash` option the following command
-can be used:
+To clean the _<none>_ image(s) left by the `--squash` option the following
+command can be used:
 
 ```
 docker rmi `docker images --filter "dangling=true" --quiet`
@@ -121,9 +121,6 @@ Starting the Unbound server can be done with the `start` command.
 ```
 docker run --volume <UNBOUND_VOL>:/data/unbound:rw --detach --interactive --tty --publish 53:53/udp <USER>/<IMAGE>:<TAG> start
 ```
-
-The Docker options `--cap-add=NET_ADMIN` and `--device=/dev/net/tun` are
-required for the container to be able to start.
 
 To help managing the container and the Unbound instance a name can be given to
 the container. To do this use the `--name <NAME>` docker option when starting
