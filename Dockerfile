@@ -1,6 +1,6 @@
 FROM fscm/debian:stretch as build
 
-ARG BUSYBOX_VERSION="1.27.1-i686"
+ARG BUSYBOX_VERSION="1.30.0"
 ARG UNBOUND_VERSION="1.8.3"
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -35,9 +35,9 @@ RUN \
   curl -sL --retry 3 --insecure "https://raw.githubusercontent.com/fscm/tools/master/lddcp/lddcp" -o ./lddcp && \
   chmod +x ./lddcp && \
   ./lddcp $(for f in /build/bin/*; do echo "-p ${f} "; done) $(for f in /build/sbin/*; do echo "-p ${f} "; done) $(for f in /build/usr/bin/*; do echo "-p ${f} "; done) -d /build && \
-  curl -sL --retry 3 --insecure "https://busybox.net/downloads/binaries/${BUSYBOX_VERSION}/busybox" -o /build/bin/busybox && \
+  curl -sL --retry 3 --insecure "https://busybox.net/downloads/binaries/${BUSYBOX_VERSION}-i686/busybox" -o /build/bin/busybox && \
   chmod +x /build/bin/busybox && \
-  for p in [ [[ basename cat chroot cp date diff echo less ls mkdir nproc rm; do ln -s busybox /build/bin/${p}; done && \
+  for p in [ [[ basename cat chroot cp date diff echo less ln ls mkdir more nproc ping ps rm; do ln -s busybox /build/bin/${p}; done && \
   ln -s /bin/ip /build/sbin/ip && \
   chmod a+x /usr/local/bin/* && \
   cp /usr/local/bin/* /build/bin/
