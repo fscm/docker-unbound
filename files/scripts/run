@@ -140,10 +140,11 @@ server:
   auto-trust-anchor-file: "${UNBOUND_ANCHOR}"
   cache-max-ttl: 86400
   cache-min-ttl: 300
-  chroot: "${__UNBOUND_DATA__}"
+  chroot: ""
   delay-close: 10000
   directory: "${__UNBOUND_DATA__}"
   do-daemonize: no
+  do-ip6: no
   do-not-query-localhost: no
   edns-buffer-size: 1472
   harden-algo-downgrade: no
@@ -226,6 +227,9 @@ EOF
   if ! [[ -f "${UNBOUND_ANCHOR}" ]]; then
     /sbin/unbound-anchor -a "${UNBOUND_ANCHOR}" || echo "  [INFO] Root trust anchor file created."
   fi
+
+  # Generate the SSL files
+  /sbin/unbound-control-setup -d "${__UNBOUND_DATA__}" &> /dev/null
 
   # All done
   echo "  [INFO] Configuration(s) successfully updated."

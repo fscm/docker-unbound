@@ -1,6 +1,10 @@
 # Unbound for Docker
 
-Docker image that should be used to start an Unbound server.
+[![Docker Pulls](https://img.shields.io/docker/pulls/fscm/unbound.svg?color=black&logo=docker&logoColor=white&style=flat-square)](https://hub.docker.com/r/fscm/unbound)
+[![Docker Stars](https://img.shields.io/docker/stars/fscm/unbound.svg?color=black&logo=docker&logoColor=white&style=flat-square)](https://hub.docker.com/r/fscm/unbound)
+[![Docker Build Status](https://img.shields.io/docker/cloud/build/fscm/unbound.svg?color=black&logo=docker&logoColor=white&style=flat-square)](https://hub.docker.com/r/fscm/unbound)
+
+Docker image with Unbound DNS.
 
 ## Synopsis
 
@@ -8,7 +12,7 @@ This script will create a Docker image with Unbound installed and with all
 of the required initialisation scripts.
 
 The Docker image resulting from this script should be the one used to
-instantiate an Unbound server.
+instantiate an Unbound DNS server.
 
 ## Getting Started
 
