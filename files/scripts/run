@@ -131,11 +131,14 @@ if [[ "${ACTION_INIT}" -gt 0 ]]; then
 include: "${UNBOUND_LOCAL_CONF}"
 server:
   access-control: 10.0.0.0/8 allow
+  access-control: 100.64.0.0/10 allow
   access-control: 127.0.0.0/8 allow
+  access-control: 169.254.0.0/16 allow
   access-control: 172.16.0.0/12 allow
   access-control: 192.168.0.0/16 allow
-  # access-control: ::1 allow
   # access-control: fc00::/7 allow
+  # access-control: fe80::/10 allow
+  # access-control: ::ffff:0:0/96 allow
   aggressive-nsec: yes
   auto-trust-anchor-file: "${UNBOUND_ANCHOR}"
   cache-max-ttl: 86400
@@ -175,12 +178,14 @@ server:
   prefetch: yes
   prefetch-key: yes
   private-address: 10.0.0.0/8
+  private-address: 100.64.0.0/10
+  private-address: 127.0.0.0/8
   private-address: 169.254.0.0/16
   private-address: 172.16.0.0/12
   private-address: 192.168.0.0/16
-  # private-address: fd00::/8
-  # private-address: fe80::/10
-  # private-address: ::ffff:0:0/96
+  private-address: fc00::/7
+  private-address: fe80::/10
+  private-address: ::ffff:0:0/96
   qname-minimisation: yes
   ratelimit: 1000
   rrset-cache-size: 4m
@@ -192,12 +197,14 @@ server:
   so-sndbuf: 0
   tls-cert-bundle: "/etc/ssl/certs/ca-certificates.crt"
   unwanted-reply-threshold: 10000
-  use-caps-for-id: yes
+  use-caps-for-id: no
   username: ""
   val-clean-additional: yes
+  val-log-level: 2
   verbosity: 1
 remote-control:
-  control-enable: no
+  control-enable: yes
+  control-interface: 127.0.0.1
 forward-zone:
   name: "."
   forward-addr: 1.1.1.1@53#one.one.one.one

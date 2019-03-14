@@ -46,8 +46,10 @@ RUN \
   ./lddcp $(for f in `find /build/ -type f -executable`; do echo "-p $f "; done) $(for f in `find /lib/x86_64-linux-gnu/ \( -name 'libnss*' -o -name 'libresolv*' \)`; do echo "-l $f "; done) -d /build && \
   curl -sL --retry 3 --insecure "https://busybox.net/downloads/binaries/${BUSYBOX_VERSION}-i686/busybox" -o /build/bin/busybox && \
   chmod +x /build/bin/busybox && \
-  for p in [ [[ basename bc cat chroot cp date diff echo less ln ls mkdir more nproc ping ps rm; do ln -s busybox /build/bin/${p}; done && \
+  for p in [ [[ awk basename bc cat chroot cp date diff echo grep ip less ln ls mkdir more nproc ping ps rm sed; do ln -s busybox /build/bin/${p}; done && \
   mkdir -p /build/usr/local && \
+  chmod a+x /root/tests/* && \
+  cp -R /root/tests /build/usr/local/ && \
   chmod a+x /root/scripts/* && \
   cp /root/scripts/* /build/bin/
 
