@@ -11,8 +11,6 @@
 # terms of the MIT License.
 #
 
-BASEDIR=$(dirname $0)
-
 # Variables
 UNBOUND_PORT=5300
 UNBOUND_TEST_NAME="google.com"
@@ -56,7 +54,7 @@ fi
 
 for interface in $(ip -o addr show | awk '{split($4,ip_addr,"/"); print ip_addr[1]}'); do
   /bin/echo -n "[TEST] Running simple query test (${interface})... "
-  answer=(dig +short +tries=1 +time=5 -p ${UNBOUND_PORT} @${interface} ${UNBOUND_TEST_NAME})
+  answer=$(dig +short +tries=1 +time=5 -p ${UNBOUND_PORT} @${interface} ${UNBOUND_TEST_NAME})
   if ! [[ -z "${answer}" ]]; then
     /bin/echo 'OK'
   else
