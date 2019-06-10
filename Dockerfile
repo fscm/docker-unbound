@@ -1,15 +1,35 @@
 FROM fscm/debian:stretch as build
 
 ARG BUSYBOX_VERSION="1.30.0"
-ARG UNBOUND_VERSION="1.9.0"
+ARG UNBOUND_VERSION="1.9.1"
 
-ENV DEBIAN_FRONTEND=noninteractive
+ENV \
+  LANG=C.UTF-8 \
+  DEBIAN_FRONTEND=noninteractive
 
 COPY files/ /root/
 
 RUN \
   apt-get -qq update && \
-  apt-get -qq -y -o=Dpkg::Use-Pty=0 --no-install-recommends install ca-certificates curl dnsutils file gcc libc-dev libevent-2.0 libevent-dev libexpat1 libexpat1-dev libfstrm-dev libprotobuf-c-dev libssl-dev make nettle-dev openssl protobuf-c-compiler tar && \
+  apt-get -qq -y -o=Dpkg::Use-Pty=0 --no-install-recommends install \
+    ca-certificates \
+    curl \
+    dnsutils \
+    file \
+    gcc \
+    libc-dev \
+    libevent-2.0 \
+    libevent-dev \
+    libexpat1 \
+    libexpat1-dev \
+    libfstrm-dev \
+    libprotobuf-c-dev \
+    libssl-dev \
+    make \
+    nettle-dev \
+    openssl \
+    protobuf-c-compiler \
+    tar && \
   sed -i '/path-include/d' /etc/dpkg/dpkg.cfg.d/90docker-excludes && \
   mkdir -p /build/data/unbound && \
   mkdir -p /build/etc/ssl/certs && \
@@ -29,12 +49,51 @@ RUN \
   mkdir -p /src/unbound && \
   curl -sL --retry 3 --insecure "https://nlnetlabs.nl/downloads/unbound/unbound-${UNBOUND_VERSION}.tar.gz" | tar xz --no-same-owner --strip-components=1 -C /src/unbound/ && \
   cd /src/unbound && \
-  ./configure --quiet --prefix=/ --libdir=/usr/lib --sysconfdir=/data --mandir=/tmp/unbound --includedir=/tmp/unbound --docdir=/tmp/unbound --disable-rpath --with-pidfile=/tmp/unbound.pid --with-rootkey-file=/data/unbound/root.key --with-libevent --with-pthreads --with-chroot-dir="" --with-dnstap-socket-path=/tmp/dnstap.sock --without-pyunbound --without-pythonmodule --enable-subnet --enable-dnstap --enable-event-api --enable-static=no && \
+  ./configure \
+    --quiet \
+    --prefix=/ \
+    --libdir=/usr/lib \
+    --sysconfdir=/data \
+    --mandir=/tmp/unbound \
+    --includedir=/tmp/unbound \
+    --docdir=/tmp/unbound \
+    --disable-rpath \
+    --with-pidfile=/tmp/unbound.pid \
+    --with-rootkey-file=/data/unbound/root.key \
+    --with-libevent \
+    --with-pthreads \
+    --with-chroot-dir="" \
+    --with-dnstap-socket-path=/tmp/dnstap.sock \
+    --without-pyunbound \
+    --without-pythonmodule \
+    --enable-subnet \
+    --enable-dnstap \
+    --enable-event-api \
+    --enable-static=no && \
   make --silent && \
   make --silent install DESTDIR=/build && \
   make --silent clean && \
   rm -rf /usr/lib/libunbound* /usr/lib/pkgconfig && \
-  ./configure --quiet --prefix=/ --libdir=/usr/lib --sysconfdir=/data --mandir=/tmp/unbound --includedir=/tmp/unbound --docdir=/tmp/unbound --disable-rpath --with-libunbound-only --with-nettle --with-rootkey-file=/data/unbound/root.key --with-libevent --with-pthreads --without-pyunbound --without-pythonmodule --enable-subnet --enable-dnstap --enable-event-api --enable-static=no && \
+  ./configure \
+    --quiet \
+    --prefix=/ \
+    --libdir=/usr/lib \
+    --sysconfdir=/data \
+    --mandir=/tmp/unbound \
+    --includedir=/tmp/unbound \
+    --docdir=/tmp/unbound \
+    --disable-rpath \
+    --with-libunbound-only \
+    --with-nettle \
+    --with-rootkey-file=/data/unbound/root.key \
+    --with-libevent \
+    --with-pthreads \
+    --without-pyunbound \
+    --without-pythonmodule \
+    --enable-subnet \
+    --enable-dnstap \
+    --enable-event-api \
+    --enable-static=no && \
   make --silent && \
   make --silent install DESTDIR=/build && \
   rm -rf /build/tmp /build/data/unbound/* && \
@@ -66,6 +125,12 @@ COPY --from=build \
   /build .
 
 VOLUME ["/data/unbound"]
+
+ENV \
+  LANG=C.UTF-8 \
+  PYTHONHOME=/ \
+  PYTHONDONTWRITEBYTECODE=1 \
+  PAGER=more
 
 ENTRYPOINT ["/bin/run"]
 
