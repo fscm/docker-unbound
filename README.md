@@ -110,7 +110,7 @@ the server.
 An example on how the Unbound service can be started:
 
 ```
-docker run --volume my_unbound:/data/unbound:rw --detach --interactive --tty --publish 53:53/udp --name my_unbound johndoe/my_unbound:latest start
+docker run --volume my_unbound:/data/unbound:rw --detach --interactive --tty --publish 53:53/udp --name my_unbound fscm/unbound:latest start
 ```
 
 To see the output of the container that was started use the following command:
