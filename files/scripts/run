@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 #
 # Shell script to start the Unbound Docker image.
 #
@@ -36,7 +36,7 @@ UNBOUND_LOCAL_CONF="${__UNBOUND_DATA__}/local-zone.conf"
 
 
 # Usage
-function show_usage() {
+show_usage() {
   echo "Usage: ${BASENAME} [options] (help|init|start)"
   echo "  help:"
   echo "    <none>"
@@ -76,14 +76,14 @@ done
 shift $((OPTIND-1))
 
 for command in "${@}"; do
-  case "${command,,}" in
-    help)
+  case "${command}" in
+    [Hh][Ee][Ll][Pp])
       ACTION_HELP=1
       ;;
-    init)
+    [Ii][Nn][Ii][Tt])
       ACTION_INIT=1
       ;;
-    start)
+    [Ss][Tt][Aa][Rr][Tt])
       ACTION_START=1
       ;;
     *)
@@ -94,35 +94,41 @@ done
 
 
 # Check arguments
-if [[ $# -eq 0 ]]; then
+if [ $# -eq 0 ]; then
   show_usage
   exit 3
 fi
-if ! ((ACTION_HELP+ACTION_INIT+ACTION_START)); then
+if [ "$((ACTION_HELP+ACTION_INIT+ACTION_START))" -eq 0 ]; then
   show_usage
   exit 0
 fi
 
 
 # Check permissions
-if [[ $EUID -ne 0 ]]; then
-  echo >&2 "  [ERROR] This script requires privileged access to system files"
-  exit 4
-fi
+#if [[ "$(id -u)" -ne 0 ]]; then
+#  echo >&2 "  [ERROR] This script requires privileged access to system files"
+#  exit 4
+#fi
 
 
 # === HELP ===
-if [[ "${ACTION_HELP}" -gt 0 ]]; then
+if [ "${ACTION_HELP}" -gt 0 ]; then
   show_usage
   exit 0
 fi
 
 
 # === INIT ===
-if [[ "${ACTION_INIT}" -gt 0 ]]; then
+if [ "${ACTION_INIT}" -gt 0 ]; then
+
+  # Create configuration dir(s)
+  if ! [ -d "${__UNBOUND_DATA__}" ]; then
+    mkdir -p ${__UNBOUND_DATA__}
+    chmod 0755 ${__UNBOUND_DATA__}
+  fi
 
   # Backup configuration files
-  if [[ -f ${UNBOUND_CONF} ]]; then
+  if [ -f ${UNBOUND_CONF} ]; then
     cp "${UNBOUND_CONF}" "${UNBOUND_CONF}.${__TS__}.bck"
   fi
 
@@ -223,39 +229,39 @@ forward-zone:
 EOF
 
   # Clean up unneeded backups
-  diff -q "${UNBOUND_CONF}" "${UNBOUND_CONF}.${__TS__}.bck" &> /dev/null && rm -f "${UNBOUND_CONF}.${__TS__}.bck" || true
+  (diff -q "${UNBOUND_CONF}" "${UNBOUND_CONF}.${__TS__}.bck" > /dev/null 2>&1 && rm -f "${UNBOUND_CONF}.${__TS__}.bck") || true
 
   # Generate the local configuration file
-  if ! [[ -f "${UNBOUND_LOCAL_CONF}" ]]; then
-    echo "#local-data: \"example.local. A 192.168.1.1\"" > "${UNBOUND_LOCAL_CONF}"
+  if ! [ -f "${UNBOUND_LOCAL_CONF}" ]; then
+    echo '#local-data: "example.local. A 192.168.1.1"' > "${UNBOUND_LOCAL_CONF}"
   fi
 
   # Generate the anchor file
-  if ! [[ -f "${UNBOUND_ANCHOR}" ]]; then
-    /sbin/unbound-anchor -a "${UNBOUND_ANCHOR}" || echo "  [INFO] Root trust anchor file created."
+  if ! [ -f "${UNBOUND_ANCHOR}" ]; then
+    unbound-anchor -a "${UNBOUND_ANCHOR}" || echo '  [INFO] Root trust anchor file created.'
   fi
 
   # Generate the SSL files
-  /sbin/unbound-control-setup -d "${__UNBOUND_DATA__}" &> /dev/null
+  unbound-control-setup -d "${__UNBOUND_DATA__}" > /dev/null 2>&1
 
   # All done
-  echo "  [INFO] Configuration(s) successfully updated."
+  echo '  [INFO] Configuration(s) successfully updated.'
 fi
 
 
 # === START ===
-if [[ "${ACTION_START}" -gt 0 ]]; then
+if [ "${ACTION_START}" -gt 0 ]; then
 
   # Create temporary dir (if needed)
-  if ! [[ -d /tmp ]]; then
+  if ! [ -d /tmp ]; then
     mkdir -m 1777 /tmp
   fi
 
   # Start the Unbound DNS server
-  if [[ -f "${UNBOUND_CONF}" ]]; then
-    /sbin/unbound -d -p -c "${UNBOUND_CONF}"
+  if [ -f "${UNBOUND_CONF}" ]; then
+    unbound -d -p -c "${UNBOUND_CONF}"
   else
-    echo >&2 "  [ERROR] Unbound DNS configuration not found."
+    echo >&2 '  [ERROR] Unbound DNS configuration not found.'
     exit 5
   fi
 fi

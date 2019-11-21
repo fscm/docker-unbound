@@ -6,4 +6,4 @@ services:
       context: .
       dockerfile: ./Dockerfile
     entrypoint: [""]
-    command: ["/usr/local/tests/tests.sh"]
+    command: ["/usr/bin/in_sanity"]

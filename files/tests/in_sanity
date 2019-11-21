@@ -1,0 +1,113 @@
+#!/bin/sh
+#
+# Shell script to test the Unbound Docker image.
+#
+# Copyright 2016-2019, Frederico Martins
+#   Author: Frederico Martins <http://github.com/fscm>
+#
+# SPDX-License-Identifier: MIT
+#
+# This program is free software. You can use it and/or modify it under the
+# terms of the MIT License.
+#
+
+# Variables
+UNBOUND_PORT=5300
+UNBOUND_TEST_NAME="google.com"
+UNBOUND_TEST_DNSSEC_OK="sigok.verteiltesysteme.net"
+UNBOUND_TEST_DNSSEC_FAIL="sigfail.verteiltesysteme.net"
+
+__UNBOUND_DATA__="/data/unbound"
+
+# Configuration files
+UNBOUND_CONF="${__UNBOUND_DATA__}/unbound.conf"
+
+echo '=== Docker Build Test ==='
+
+# Create temporary dir (if needed)
+if ! [ -d /tmp ]; then
+  mkdir -m 1777 /tmp
+fi
+
+# Create data dir (if needed)
+if ! [ -d ${__UNBOUND_DATA__} ]; then
+  mkdir -p ${__UNBOUND_DATA__}
+  chmod 0755 ${__UNBOUND_DATA__}
+fi
+
+printf '[TEST] Check if OpenSSL is installed... '
+if openssl version > /dev/null 2>&1; then
+  echo 'OK'
+else
+  echo 'Failed'
+  exit 1
+fi
+
+printf '[TEST] Check if Root Certificates are installed... '
+if (echo | openssl s_client -connect google.com:443 2>&1) | grep -q 'Verify return code: 0 (ok)'; then
+  echo 'OK'
+else
+  echo 'Failed'
+  exit 2
+fi
+
+printf '[TEST] Configuring the Unbound server... '
+if run -p ${UNBOUND_PORT} init > /dev/null 2>&1; then
+  echo 'OK'
+else
+  echo 'Failed'
+  exit 3
+fi
+sed -i -e '/do-daemonize/ s/no/yes/' "${UNBOUND_CONF}"
+
+printf '[TEST] Starting Unbound server... '
+if [ -f "${UNBOUND_CONF}" ]; then
+  if unbound -c "${UNBOUND_CONF}" > /dev/null 2>&1; then
+    echo 'OK'
+  else
+    echo 'Failed'
+    exit 5
+  fi
+else
+  echo 'Failed'
+  exit 4
+fi
+
+for interface in $(ip -o addr show | awk '{split($4,ip_addr,"/"); print ip_addr[1]}'); do
+  printf "[TEST] Running simple query test (%s)... " "${interface}"
+  answer=$(dig +short +tries=1 +time=5 -p ${UNBOUND_PORT} @"${interface}" ${UNBOUND_TEST_NAME})
+  if ! [ -z "${answer}" ]; then
+    echo 'OK'
+  else
+    echo 'Failed'
+    exit 6
+  fi
+done
+
+printf '[TEST] Running DNSSEC query (test OK)... '
+if (dig +short +dnssec +tries=1 +time=5 -p ${UNBOUND_PORT} @127.0.0.1 ${UNBOUND_TEST_DNSSEC_OK} | grep -q "^A "); then
+  echo 'OK'
+else
+  echo 'Failed'
+  exit 7
+fi
+
+
+printf '[TEST] Running DNSSEC query (test FAIL)... '
+if (dig +dnssec +tries=1 +time=5 -p ${UNBOUND_PORT} @127.0.0.1 ${UNBOUND_TEST_DNSSEC_FAIL} | grep -q "SERVFAIL"); then
+  echo 'OK'
+else
+  echo 'Failed'
+  exit 8
+fi
+
+
+printf '[TEST] Stoping Unbound server... '
+if unbound-control stop > /dev/null 2>&1; then
+  echo 'OK'
+else
+  echo 'Failed'
+  exit 9
+fi
+
+exit 0

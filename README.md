@@ -1,4 +1,4 @@
-# Unbound for Docker
+# Unbound DNS for Docker
 
 [![Docker Pulls](https://img.shields.io/docker/pulls/fscm/unbound.svg?color=black&logo=docker&logoColor=white&style=flat-square)](https://hub.docker.com/r/fscm/unbound)
 [![Docker Stars](https://img.shields.io/docker/stars/fscm/unbound.svg?color=black&logo=docker&logoColor=white&style=flat-square)](https://hub.docker.com/r/fscm/unbound)
@@ -10,7 +10,8 @@ A small Unbound DNS image that can be used to start a DNS server.
 
 - `1.8.3`
 - `1.9.0`
-- `1.9.1`, `latest`
+- `1.9.1`
+- `1.9.4`, `latest`
 
 ## What is Unbound DNS?
 
@@ -34,24 +35,23 @@ Docker installation instructions can be found
 
 ### Usage
 
-In order to end up with a functional DNS service - after having build
+In order to end up with a functional Unbound DNS service - after having build
 the container - some configurations have to be performed.
 
 To help perform those configurations a small set of commands is included on the
 Docker container.
 
 - `help` - Usage help.
-- `init` - Configure the Unbound service.
-- `start` - Start the Unbound service.
+- `init` - Configure the Unbound DNS service.
+- `start` - Start the Unbound DNS service.
 
-To store the configuration settings of the Unbound server as well as the users
-A couple of volumes should be created and added the the container when running
-the same.
+To store the configuration settings of the Unbound DNS server a volume should
+be created and added to the container when running the same.
 
 #### Creating Volumes
 
-To be able to make all of the Unbound configuration settings persistent, the
-same will have to be stored on a different volume.
+To be able to make all of the Unbound DNS configuration settings persistent,
+the same will have to be stored on a different volume.
 
 Creating volumes can be done using the `docker` tool. To create a volume use
 the following command:
@@ -69,82 +69,92 @@ docker volume create --name my_unbound
 **Note:** A local folder can also be used instead of a volume. Use the path of
 the folder in place of the volume name.
 
-#### Configuring the Unbound Server
+#### Configuring the Unbound DNS Server
 
-To configure the Unbound server the `init` command must be used.
+To configure the Unbound DNS server the `init` command must be used.
 
 ```
-docker run --volume UNBOUND_VOL:/data/unbound:rw --rm fscm/unbound:latest [options] init
+docker container run --volume UNBOUND_VOL:/data:rw --rm fscm/unbound [options] init
 ```
 
 * `-p PORT` - The server port (defaults to 53).
 * `-s SLABS` - The number of slabs (must a power of two bellow the 'threads' value).
 * `-t THREADS` - The number of threads.
 
-After this step the Unbound server should be configured and ready to use.
+After this step the Unbound DNS server should be configured and ready to be
+used.
 
-An example on how to configure the Unbound server:
+An example on how to configure the Unbound DNS server:
 
 ```
-docker run --volume my_unbound:/data/unbound:rw --rm fscm/unbound:latest -s 1 -t 1 init
+docker container run --volume my_unbound:/data:rw --rm fscm/unbound -s 1 -t 1 init
 ```
 
 **Note:** All the configuration files will be created and placed on the Unbound
-volume. You can mount that volume in your favourite Docker image and edit them
+volume. You can mount that volume in your favorite Docker image and edit them
 if needed. Local names can be created in the `local-zone.conf` file.
 
-#### Start the Unbound Server
+#### Start the Unbound DNS Server
 
-After configuring the Unbound server the same can now be started.
+After configuring the Unbound DNS server the same can now be started.
 
-Starting the Unbound server can be done with the `start` command.
-
-```
-docker run --volume UNBOUND_VOL:/data/unbound:rw --detach --interactive --tty --publish 53:53/udp fscm/unbound:latest start
-```
-
-To help managing the container and the Unbound instance a name can be given to
-the container. To do this use the `--name NAME` docker option when starting
-the server.
-
-An example on how the Unbound service can be started:
+Starting the Unbound DNS server can be done with the `start` command.
 
 ```
-docker run --volume my_unbound:/data/unbound:rw --detach --interactive --tty --publish 53:53/udp --name my_unbound fscm/unbound:latest start
+docker container run --volume UNBOUND_VOL:/data:rw --detach --publish 53:53/udp fscm/unbound start
+```
+
+To help managing the container and the Unbound DNS instance a name can be
+given to the container. To do this use the `--name <NAME>` docker option when
+starting the server
+
+An example on how the Unbound DNS service can be started:
+
+```
+docker container run --volume my_unbound:/data:rw --detach --publish 53:53/udp --name my_unbound fscm/unbound start
 ```
 
 To see the output of the container that was started use the following command:
 
 ```
-docker attach CONTAINER_ID
+docker container attach CONTAINER_ID
 ```
 
 Use the `ctrl+p` `ctrl+q` command sequence to detach from the container.
 
-#### Stop the Unbound Server
+#### Stop the Unbound DNS Server
 
-If needed the Unbound server can be stoped and later started again (as long as
-the command used to perform the initial start was as indicated before).
+If needed the Unbound DNS server can be stoped and later started again (as
+long as the command used to perform the initial start was as indicated before).
 
 To stop the server use the following command:
 
 ```
-docker stop CONTAINER_ID
+docker container stop CONTAINER_ID
 ```
 
 To start the server again use the following command:
 
 ```
-docker start CONTAINER_ID
+docker container start CONTAINER_ID
 ```
 
-### Unbound Status
+### Unbound DNS Status
 
-The Unbound server status can be check by looking at the Unbound server output
-data using the docker command:
+The Unbound DNS server status can be check in two ways.
+
+The first way is by looking at the Unbound DNS server output data using the
+docker command:
 
 ```
 docker container logs CONTAINER_ID
+```
+
+The second way would be by looking at the Unbound DNS server status info. This
+can be done with the **unbound-control** command:
+
+```
+docker container exec --interactive --tty CONTAINER_ID unbound-control status
 ```
 
 ## Build
