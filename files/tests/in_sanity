@@ -12,12 +12,12 @@
 #
 
 # Variables
-UNBOUND_PORT=5300
 UNBOUND_TEST_NAME="google.com"
 UNBOUND_TEST_DNSSEC_OK="sigok.verteiltesysteme.net"
 UNBOUND_TEST_DNSSEC_FAIL="sigfail.verteiltesysteme.net"
 
-__UNBOUND_DATA__="/data/unbound"
+__DATA_DIR__="/data"
+__UNBOUND_DATA__="${__DATA_DIR__}/unbound"
 
 # Configuration files
 UNBOUND_CONF="${__UNBOUND_DATA__}/unbound.conf"
@@ -52,16 +52,16 @@ else
 fi
 
 printf '[TEST] Configuring the Unbound server... '
-if run -p ${UNBOUND_PORT} init > /dev/null 2>&1; then
+if run init > /dev/null 2>&1; then
   echo 'OK'
 else
   echo 'Failed'
   exit 3
 fi
-sed -i -e '/do-daemonize/ s/no/yes/' "${UNBOUND_CONF}"
 
 printf '[TEST] Starting Unbound server... '
 if [ -f "${UNBOUND_CONF}" ]; then
+  sed -i -e '/do-daemonize/ s/no/yes/' "${UNBOUND_CONF}"
   if unbound -c "${UNBOUND_CONF}" > /dev/null 2>&1; then
     echo 'OK'
   else
@@ -75,7 +75,7 @@ fi
 
 for interface in $(ip -o addr show | awk '{split($4,ip_addr,"/"); print ip_addr[1]}'); do
   printf "[TEST] Running simple query test (%s)... " "${interface}"
-  answer=$(dig +short +tries=1 +time=5 -p ${UNBOUND_PORT} @"${interface}" ${UNBOUND_TEST_NAME})
+  answer=$(dig +short +tries=1 +time=5 @"${interface}" ${UNBOUND_TEST_NAME})
   if ! [ -z "${answer}" ]; then
     echo 'OK'
   else
@@ -85,22 +85,20 @@ for interface in $(ip -o addr show | awk '{split($4,ip_addr,"/"); print ip_addr[
 done
 
 printf '[TEST] Running DNSSEC query (test OK)... '
-if (dig +short +dnssec +tries=1 +time=5 -p ${UNBOUND_PORT} @127.0.0.1 ${UNBOUND_TEST_DNSSEC_OK} | grep -q "^A "); then
+if (dig +short +dnssec +tries=1 +time=5 @127.0.0.1 ${UNBOUND_TEST_DNSSEC_OK} | grep -q "^A "); then
   echo 'OK'
 else
   echo 'Failed'
   exit 7
 fi
 
-
 printf '[TEST] Running DNSSEC query (test FAIL)... '
-if (dig +dnssec +tries=1 +time=5 -p ${UNBOUND_PORT} @127.0.0.1 ${UNBOUND_TEST_DNSSEC_FAIL} | grep -q "SERVFAIL"); then
+if (dig +dnssec +tries=1 +time=5 @127.0.0.1 ${UNBOUND_TEST_DNSSEC_FAIL} | grep -q "SERVFAIL"); then
   echo 'OK'
 else
   echo 'Failed'
   exit 8
 fi
-
 
 printf '[TEST] Stoping Unbound server... '
 if unbound-control stop > /dev/null 2>&1; then

@@ -22,11 +22,11 @@ ACTION_HELP=0
 ACTION_INIT=0
 ACTION_START=0
 
-UNBOUND_SERVER_PORT=53
 UNBOUND_SERVER_THREADS=$(nproc --ignore=1)
 UNBOUND_SERVER_SLABS=$(echo "x=l(${UNBOUND_SERVER_THREADS})/l(2); scale=0; 2^((x)/1)" | bc -q -l;)
 
-__UNBOUND_DATA__="/data/unbound"
+__DATA_DIR__="/data"
+__UNBOUND_DATA__="${__DATA_DIR__}/unbound"
 
 
 # Configuration files
@@ -35,105 +35,9 @@ UNBOUND_CONF="${__UNBOUND_DATA__}/unbound.conf"
 UNBOUND_LOCAL_CONF="${__UNBOUND_DATA__}/local-zone.conf"
 
 
-# Usage
-show_usage() {
-  echo "Usage: ${BASENAME} [options] (help|init|start)"
-  echo "  help:"
-  echo "    <none>"
-  echo "  init:"
-  echo "    -p <PORT>      The Unbound DNS server port (defaults to 53)."
-  echo "    -s <SLABS>     The Unbound DNS server number of slabs (must be a"
-  echo "                   power of two bellow the 'threads' value)."
-  echo "    -t <THREADS>   The Unbound DNS server number of threads."
-  echo "  start:"
-  echo "    <none>"
-}
-
-
-# Options parsing
-while getopts ":p:s:t:" opt; do
-  case ${opt} in
-    p)
-      UNBOUND_SERVER_PORT=${OPTARG}
-      ;;
-    s)
-      UNBOUND_SERVER_SLABS=${OPTARG}
-      ;;
-    t)
-      UNBOUND_SERVER_THREADS=${OPTARG}
-      ;;
-    \?)
-      echo >&2 "  [ERROR] Invalid option: -${OPTARG}"
-      exit 1
-      ;;
-    :)
-      echo >&2 "  [ERROR] Option -${OPTARG} requires an argument"
-      exit 2
-      ;;
-  esac
-done
-
-shift $((OPTIND-1))
-
-for command in "${@}"; do
-  case "${command}" in
-    [Hh][Ee][Ll][Pp])
-      ACTION_HELP=1
-      ;;
-    [Ii][Nn][Ii][Tt])
-      ACTION_INIT=1
-      ;;
-    [Ss][Tt][Aa][Rr][Tt])
-      ACTION_START=1
-      ;;
-    *)
-      echo >&2 "  [WARN] Unknown command '${command}'"
-      ;;
-  esac
-done
-
-
-# Check arguments
-if [ $# -eq 0 ]; then
-  show_usage
-  exit 3
-fi
-if [ "$((ACTION_HELP+ACTION_INIT+ACTION_START))" -eq 0 ]; then
-  show_usage
-  exit 0
-fi
-
-
-# Check permissions
-#if [[ "$(id -u)" -ne 0 ]]; then
-#  echo >&2 "  [ERROR] This script requires privileged access to system files"
-#  exit 4
-#fi
-
-
-# === HELP ===
-if [ "${ACTION_HELP}" -gt 0 ]; then
-  show_usage
-  exit 0
-fi
-
-
-# === INIT ===
-if [ "${ACTION_INIT}" -gt 0 ]; then
-
-  # Create configuration dir(s)
-  if ! [ -d "${__UNBOUND_DATA__}" ]; then
-    mkdir -p ${__UNBOUND_DATA__}
-    chmod 0755 ${__UNBOUND_DATA__}
-  fi
-
-  # Backup configuration files
-  if [ -f ${UNBOUND_CONF} ]; then
-    cp "${UNBOUND_CONF}" "${UNBOUND_CONF}.${__TS__}.bck"
-  fi
-
-  # Generate the configuration file
-  cat > ${UNBOUND_CONF} <<EOF
+# Configuration file
+create_config_file() {
+  cat > "${UNBOUND_CONF}" <<EOF
 include: "${UNBOUND_LOCAL_CONF}"
 server:
   access-control: 10.0.0.0/8 allow
@@ -180,7 +84,6 @@ server:
   neg-cache-size: 4m
   num-queries-per-thread: 4096
   num-threads: ${UNBOUND_SERVER_THREADS}
-  port: ${UNBOUND_SERVER_PORT}
   prefetch: yes
   prefetch-key: yes
   private-address: 10.0.0.0/8
@@ -201,7 +104,8 @@ server:
   so-rcvbuf: 0
   so-reuseport: yes
   so-sndbuf: 0
-  tls-cert-bundle: "/etc/ssl/certs/ca-certificates.crt"
+  #tls-cert-bundle: "/etc/ssl/certs/ca-certificates.crt"
+  tls-cert-bundle: "$(openssl version -d | sed -n -e 's/.*"\(.*\)"/\1/p')/certs/certificates.crt"
   unwanted-reply-threshold: 10000
   use-caps-for-id: no
   username: ""
@@ -227,13 +131,118 @@ forward-zone:
   # forward-addr: 8.8.4.4@853#dns.google
   # forward-addr: 149.112.112.112@853#dns.quad9.net
 EOF
+}
+
+# Local configuration file
+create_local_config_file() {
+  cat > "${UNBOUND_LOCAL_CONF}" <<EOF
+#local-data: "example.local. A 192.168.1.1"
+#local-data-ptr: "192.168.1.1 example.local."
+EOF
+}
+
+# Usage
+show_usage() {
+  echo "Usage: ${BASENAME} [options] (help|init|start)"
+  echo "  help:"
+  echo "    <none>"
+  echo "  init:"
+  echo "    -s <SLABS>     The Unbound DNS server number of slabs (must be a"
+  echo "                   power of two bellow the 'threads' value)."
+  echo "    -t <THREADS>   The Unbound DNS server number of threads."
+  echo "  start:"
+  echo "    <none>"
+}
+
+
+while getopts ":s:t:" opt; do
+  case ${opt} in
+    s)
+      UNBOUND_SERVER_SLABS=${OPTARG}
+      ;;
+    t)
+      UNBOUND_SERVER_THREADS=${OPTARG}
+      ;;
+    \?)
+      echo >&2 "  [ERROR] Invalid option: -${OPTARG}"
+      exit 1
+      ;;
+    :)
+      echo >&2 "  [ERROR] Option -${OPTARG} requires an argument"
+      exit 2
+      ;;
+  esac
+done
+
+shift $((OPTIND-1))
+
+for command in "${@}"; do
+  case "${command}" in
+    [Hh][Ee][Ll][Pp])
+      ACTION_HELP=1
+      ;;
+    [Ii][Nn][Ii][Tt])
+      ACTION_INIT=1
+      ;;
+    [Ss][Tt][Aa][Rr][Tt])
+      ACTION_START=1
+      ;;
+    *)
+      #echo >&2 "  [WARN] Unknown command '${command}'"
+      exec "$@"
+      ;;
+  esac
+done
+
+
+# Check arguments
+if [ $# -eq 0 ]; then
+  show_usage
+  exit 3
+fi
+if [ "$((ACTION_HELP+ACTION_INIT+ACTION_START))" -eq 0 ]; then
+  show_usage
+  exit 0
+fi
+
+
+# Check permissions
+#if [[ "$(id -u)" -ne 0 ]]; then
+#  echo >&2 "  [ERROR] This script requires privileged access to system files"
+#  exit 4
+#fi
+
+
+# === HELP ===
+if [ "${ACTION_HELP}" -gt 0 ]; then
+  show_usage
+  exit 0
+fi
+
+
+# === INIT ===
+if [ "${ACTION_INIT}" -gt 0 ]; then
+
+  # Create configuration dir(s)
+  if ! [ -d "${__UNBOUND_DATA__}" ]; then
+    mkdir -p "${__UNBOUND_DATA__}"
+    chmod 0755 "${__UNBOUND_DATA__}"
+  fi
+
+  # Backup configuration files
+  if [ -f "${UNBOUND_CONF}" ]; then
+    cp "${UNBOUND_CONF}" "${UNBOUND_CONF}.${__TS__}.bck"
+  fi
+
+  # Generate the configuration file
+  create_config_file
 
   # Clean up unneeded backups
   (diff -q "${UNBOUND_CONF}" "${UNBOUND_CONF}.${__TS__}.bck" > /dev/null 2>&1 && rm -f "${UNBOUND_CONF}.${__TS__}.bck") || true
 
   # Generate the local configuration file
   if ! [ -f "${UNBOUND_LOCAL_CONF}" ]; then
-    echo '#local-data: "example.local. A 192.168.1.1"' > "${UNBOUND_LOCAL_CONF}"
+    create_local_config_file
   fi
 
   # Generate the anchor file

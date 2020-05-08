@@ -101,7 +101,6 @@ To configure the Unbound DNS server the `init` command must be used.
 docker container run --volume <UNBOUND_VOL>:/data:rw --rm <USER>/<IMAGE>:<TAG> [options] init
 ```
 
-* `-p <PORT>` - The server port (defaults to 53).
 * `-s <SLABS>` - The number of slabs (must a power of two bellow the 'threads' value).
 * `-t <THREADS>` - The number of threads.
 

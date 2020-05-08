@@ -7,7 +7,8 @@ A small Unbound DNS image that can be used to start a DNS server.
 - `1.8.3`
 - `1.9.0`
 - `1.9.1`
-- `1.9.4`, `latest`
+- `1.9.4`
+- `1.10.0`, `latest`
 
 ## What is Unbound DNS?
 
@@ -73,7 +74,6 @@ To configure the Unbound DNS server the `init` command must be used.
 docker container run --volume UNBOUND_VOL:/data:rw --rm fscm/unbound [options] init
 ```
 
-* `-p PORT` - The server port (defaults to 53).
 * `-s SLABS` - The number of slabs (must a power of two bellow the 'threads' value).
 * `-t THREADS` - The number of threads.
 
