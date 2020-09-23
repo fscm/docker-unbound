@@ -104,7 +104,7 @@ server:
   so-reuseport: yes
   so-sndbuf: 0
   #tls-cert-bundle: "/etc/ssl/certs/ca-certificates.crt"
-  tls-cert-bundle: "$(openssl version -d | sed -n -e 's/.*"\(.*\)"/\1/p')/certs/certificates.crt"
+  tls-cert-bundle: "$(openssl version -d | sed -n -e 's/.*"\(.*\)"/\1/p')/certs/ca-certificates.crt"
   unwanted-reply-threshold: 10000
   use-caps-for-id: no
   username: ""

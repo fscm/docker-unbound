@@ -337,14 +337,14 @@ RUN \
       --libdir='/usr/lib' \
       --libexecdir='/usr/libexec' \
       --prefix='/usr' \
-      --sysconfdir='/etc' \
+      --sysconfdir="${__DATA_DIR__}" \
       --with-chroot-dir="" \
       --with-libevent="${__BUILD_DIR__}/usr" \
       --with-libexpat="${__BUILD_DIR__}/usr" \
       --with-pidfile="/tmp/unbound.pid" \
       --with-pthreads \
       --with-rootkey-file="${__UNBOUND_DATA_DIR__}/root.key" \
-      --with-run-dir="" \
+      #--with-run-dir="" \
       --with-ssl="${__BUILD_DIR__}/usr" \
       --without-pythonmodule \
       --without-pyunbound \
@@ -358,6 +358,7 @@ RUN \
       --disable-shared && \
     make > /dev/null && \
     make DESTDIR="${__BUILD_DIR__}" install > /dev/null && \
+    rm -rf "${__BUILD_DIR__}${__DATA_DIR__}"/* && \
     install --directory --owner="${__USER__}" --group="${__USER__}" --mode=0755 "${__BUILD_DIR__}/licenses/unbound" && \
     (cd .. && find ./ -type f -a \( -name '*LICENSE*' -o -name '*COPYING*' \) -exec cp --parents {} "${__BUILD_DIR__}/licenses/unbound" ';') && \
     cd ~- && \
