@@ -16,8 +16,7 @@ UNBOUND_TEST_NAME="google.com"
 UNBOUND_TEST_DNSSEC_OK="sigok.verteiltesysteme.net"
 UNBOUND_TEST_DNSSEC_FAIL="sigfail.verteiltesysteme.net"
 
-__DATA_DIR__="/data"
-__UNBOUND_DATA__="${__DATA_DIR__}/unbound"
+__UNBOUND_DATA__="${UNBOUND_DATA_DIR:-/data/unbound}"
 
 # Configuration files
 UNBOUND_CONF="${__UNBOUND_DATA__}/unbound.conf"
@@ -43,34 +42,50 @@ else
   exit 1
 fi
 
-printf '[TEST] Check if Root Certificates are installed... '
-if (echo | openssl s_client -connect google.com:443 2>&1) | grep -q 'Verify return code: 0 (ok)'; then
+printf '[TEST] Check if Unbound is installed... '
+if unbound -V > /dev/null 2>&1; then
   echo 'OK'
 else
   echo 'Failed'
   exit 2
 fi
 
-printf '[TEST] Configuring the Unbound server... '
-if run init > /dev/null 2>&1; then
+printf '[TEST] Check if Busybox is installed... '
+if busybox > /dev/null 2>&1; then
   echo 'OK'
 else
   echo 'Failed'
   exit 3
 fi
 
-printf '[TEST] Starting Unbound server... '
+printf '[TEST] Check if OpenSSL (and Root Certificates) can be used... '
+if (echo | openssl s_client -connect google.com:443 2>&1) | grep -q 'Verify return code: 0 (ok)'; then
+  echo 'OK'
+else
+  echo 'Failed'
+  exit 4
+fi
+
+printf '[TEST] Configuring the Unbound server... '
+if entrypoint init > /dev/null 2>&1; then
+  echo 'OK'
+else
+  echo 'Failed'
+  exit 5
+fi
+
+printf '[TEST] Starting the Unbound server... '
 if [ -f "${UNBOUND_CONF}" ]; then
   sed -i -e '/do-daemonize/ s/no/yes/' "${UNBOUND_CONF}"
   if unbound -c "${UNBOUND_CONF}" > /dev/null 2>&1; then
     echo 'OK'
   else
     echo 'Failed'
-    exit 5
+    exit 7
   fi
 else
   echo 'Failed'
-  exit 4
+  exit 6
 fi
 
 for interface in $(ip -o addr show | awk '{split($4,ip_addr,"/"); print ip_addr[1]}'); do
@@ -80,7 +95,7 @@ for interface in $(ip -o addr show | awk '{split($4,ip_addr,"/"); print ip_addr[
     echo 'OK'
   else
     echo 'Failed'
-    exit 6
+    exit 8
   fi
 done
 
@@ -89,7 +104,7 @@ if (dig +short +dnssec +tries=1 +time=5 @127.0.0.1 ${UNBOUND_TEST_DNSSEC_OK} | g
   echo 'OK'
 else
   echo 'Failed'
-  exit 7
+  exit 9
 fi
 
 printf '[TEST] Running DNSSEC query (test FAIL)... '
@@ -97,15 +112,15 @@ if (dig +dnssec +tries=1 +time=5 @127.0.0.1 ${UNBOUND_TEST_DNSSEC_FAIL} | grep -
   echo 'OK'
 else
   echo 'Failed'
-  exit 8
+  exit 10
 fi
 
-printf '[TEST] Stoping Unbound server... '
+printf '[TEST] Stoping the Unbound server... '
 if unbound-control stop > /dev/null 2>&1; then
   echo 'OK'
 else
   echo 'Failed'
-  exit 9
+  exit 11
 fi
 
 exit 0

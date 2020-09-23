@@ -8,7 +8,8 @@ A small Unbound DNS image that can be used to start a DNS server.
 - `1.9.0`
 - `1.9.1`
 - `1.9.4`
-- `1.10.0`, `latest`
+- `1.10.0`
+- `1.11.0`, `latest`
 
 ## What is Unbound DNS?
 

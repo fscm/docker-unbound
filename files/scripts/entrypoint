@@ -23,10 +23,9 @@ ACTION_INIT=0
 ACTION_START=0
 
 UNBOUND_SERVER_THREADS=$(nproc --ignore=1)
-UNBOUND_SERVER_SLABS=$(echo "x=l(${UNBOUND_SERVER_THREADS})/l(2); scale=0; 2^((x)/1)" | bc -q -l;)
+UNBOUND_SERVER_SLABS=$(echo "x=l(${UNBOUND_SERVER_THREADS})/l(2); scale=0; 2^(x/1)" | bc -q -l;)
 
-__DATA_DIR__="/data"
-__UNBOUND_DATA__="${__DATA_DIR__}/unbound"
+__UNBOUND_DATA__="${UNBOUND_DATA_DIR:-/data/unbound}"
 
 
 # Configuration files
