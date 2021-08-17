@@ -4,12 +4,7 @@ A small Unbound DNS image that can be used to start a DNS server.
 
 ## Supported tags
 
-- `1.8.3`
-- `1.9.0`
-- `1.9.1`
-- `1.9.4`
-- `1.10.0`
-- `1.11.0`, `latest`
+- `latest`
 
 ## What is Unbound DNS?
 
@@ -54,13 +49,13 @@ the same will have to be stored on a different volume.
 Creating volumes can be done using the `docker` tool. To create a volume use
 the following command:
 
-```
+```shell
 docker volume create --name VOLUME_NAME
 ```
 
 Two create the required volume the following command can be used:
 
-```
+```shell
 docker volume create --name my_unbound
 ```
 
@@ -71,19 +66,19 @@ the folder in place of the volume name.
 
 To configure the Unbound DNS server the `init` command must be used.
 
-```
+```shell
 docker container run --volume UNBOUND_VOL:/data:rw --rm fscm/unbound [options] init
 ```
 
-* `-s SLABS` - The number of slabs (must a power of two bellow the 'threads' value).
-* `-t THREADS` - The number of threads.
+- `-s SLABS` - The number of slabs (must a power of two bellow the 'threads' value).
+- `-t THREADS` - The number of threads.
 
 After this step the Unbound DNS server should be configured and ready to be
 used.
 
 An example on how to configure the Unbound DNS server:
 
-```
+```shell
 docker container run --volume my_unbound:/data:rw --rm fscm/unbound -s 1 -t 1 init
 ```
 
@@ -97,7 +92,7 @@ After configuring the Unbound DNS server the same can now be started.
 
 Starting the Unbound DNS server can be done with the `start` command.
 
-```
+```shell
 docker container run --volume UNBOUND_VOL:/data:rw --detach --publish 53:53/udp fscm/unbound start
 ```
 
@@ -107,13 +102,13 @@ starting the server
 
 An example on how the Unbound DNS service can be started:
 
-```
+```shell
 docker container run --volume my_unbound:/data:rw --detach --publish 53:53/udp --name my_unbound fscm/unbound start
 ```
 
 To see the output of the container that was started use the following command:
 
-```
+```shell
 docker container attach CONTAINER_ID
 ```
 
@@ -126,13 +121,13 @@ long as the command used to perform the initial start was as indicated before).
 
 To stop the server use the following command:
 
-```
+```shell
 docker container stop CONTAINER_ID
 ```
 
 To start the server again use the following command:
 
-```
+```shell
 docker container start CONTAINER_ID
 ```
 
@@ -143,14 +138,14 @@ The Unbound DNS server status can be check in two ways.
 The first way is by looking at the Unbound DNS server output data using the
 docker command:
 
-```
+```shell
 docker container logs CONTAINER_ID
 ```
 
 The second way would be by looking at the Unbound DNS server status info. This
 can be done with the **unbound-control** command:
 
-```
+```shell
 docker container exec --interactive --tty CONTAINER_ID unbound-control status
 ```
 
@@ -166,7 +161,7 @@ available, see the [tags on this repository](https://github.com/fscm/docker-unbo
 
 ## Authors
 
-* **Frederico Martins** - [fscm](https://github.com/fscm)
+- **Frederico Martins** - [fscm](https://github.com/fscm)
 
 See also the list of [contributors](https://github.com/fscm/docker-unbound/contributors)
 who participated in this project.

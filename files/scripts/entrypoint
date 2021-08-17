@@ -25,7 +25,8 @@ ACTION_START=0
 UNBOUND_SERVER_THREADS=$(nproc --ignore=1)
 UNBOUND_SERVER_SLABS=$(echo "x=l(${UNBOUND_SERVER_THREADS})/l(2); scale=0; 2^(x/1)" | bc -q -l;)
 
-__UNBOUND_DATA__="${UNBOUND_DATA_DIR:-/data/unbound}"
+__DATA_DIR__="${DATA_DIR:-/data}"
+__UNBOUND_DATA__="${__DATA_DIR__}/unbound"
 
 
 # Configuration files
@@ -103,8 +104,8 @@ server:
   so-rcvbuf: 0
   so-reuseport: yes
   so-sndbuf: 0
-  #tls-cert-bundle: "/etc/ssl/certs/ca-certificates.crt"
-  tls-cert-bundle: "$(openssl version -d | sed -n -e 's/.*"\(.*\)"/\1/p')/certs/ca-certificates.crt"
+  #tls-cert-bundle: "/etc/ssl/certs/ca-bundle.crt"
+  tls-cert-bundle: "$(openssl version -d | sed -n -e 's/.*"\(.*\)"/\1/p')/certs/ca-bundle.crt"
   unwanted-reply-threshold: 10000
   use-caps-for-id: no
   username: ""
@@ -246,7 +247,7 @@ if [ "${ACTION_INIT}" -gt 0 ]; then
 
   # Generate the anchor file
   if ! [ -f "${UNBOUND_ANCHOR}" ]; then
-    unbound-anchor -a "${UNBOUND_ANCHOR}" || echo '  [INFO] Root trust anchor file created.'
+    unbound-anchor -a "${UNBOUND_ANCHOR}" > /dev/null 2>&1 || echo '  [INFO] Root trust anchor file created.'
   fi
 
   # Generate the SSL files

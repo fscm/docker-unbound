@@ -16,7 +16,8 @@ UNBOUND_TEST_NAME="google.com"
 UNBOUND_TEST_DNSSEC_OK="sigok.verteiltesysteme.net"
 UNBOUND_TEST_DNSSEC_FAIL="sigfail.verteiltesysteme.net"
 
-__UNBOUND_DATA__="${UNBOUND_DATA_DIR:-/data/unbound}"
+__DATA_DIR__="${DATA_DIR:-/data}"
+__UNBOUND_DATA__="${__DATA_DIR__}/unbound"
 
 # Configuration files
 UNBOUND_CONF="${__UNBOUND_DATA__}/unbound.conf"

@@ -1,32 +1,21 @@
 # global args
 ARG __BUILD_DIR__="/build"
 ARG __DATA_DIR__="/data"
-ARG __UNBOUND_DATA_DIR__="${__DATA_DIR__}/unbound"
 
 
 
-FROM fscm/debian:buster as build
+FROM fscm/centos:stream as build
 
 ARG __BUILD_DIR__
 ARG __DATA_DIR__
-ARG __UNBOUND_DATA_DIR__
-ARG BIND_VERSION="9.17.5"
-ARG KERNEL_VERSION="5.8.7"
-ARG LIBEVENT_VERSION="2.1.12"
-ARG LIBEXPAT_VERSION="2.2.9"
-ARG LIBUV_VERSION="1.39.0"
-ARG OPENSSL_VERSION="1.1.1g"
-ARG UNBOUND_VERSION="1.11.0"
-ARG ZLIB_VERSION="1.2.11"
+ARG UNBOUND_VERSION="1.13.2"
 ARG __USER__="root"
 ARG __WORK_DIR__="/work"
 ARG __SOURCE_DIR__="${__WORK_DIR__}/src"
 
 ENV \
   LANG="C.UTF-8" \
-  LC_ALL="C.UTF-8" \
-  DEBCONF_NONINTERACTIVE_SEEN="true" \
-  DEBIAN_FRONTEND="noninteractive"
+  LC_ALL="C.UTF-8"
 
 USER "${__USER__}"
 
@@ -39,389 +28,343 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 RUN \
 # build env
-  echo '=== setting build env ===' && \
-  time { \
-    set +h && \
-    export __NPROC__="$(getconf _NPROCESSORS_ONLN || echo 1)" && \
-    export MAKEFLAGS="--silent --output-sync --no-print-directory --jobs ${__NPROC__} V=0" && \
-    export PKG_CONFIG_PATH="/usr/lib/x86_64-linux-musl/pkgconfig" && \
-    export TIMEFORMAT='=== time taken: %lR' ; \
-  } && \
+  echo '--> setting build env' && \
+  set +h && \
+  export __NPROC__="$(getconf _NPROCESSORS_ONLN || echo 1)" && \
+  export DCACHE_LINESIZE="$(getconf LEVEL1_DCACHE_LINESIZE || echo 64)" && \
+  export MAKEFLAGS="--silent --no-print-directory --jobs ${__NPROC__}" && \
+  export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig && \
 # build structure
-  echo '=== creating build structure ===' && \
-  time { \
-    for folder in 'bin' 'sbin'; do \
-      install --directory --owner="${__USER__}" --group="${__USER__}" --mode=0755 "${__BUILD_DIR__}/usr/${folder}"; \
-      ln --symbolic "usr/${folder}" "${__BUILD_DIR__}/${folder}"; \
-    done && \
-    for folder in 'include' 'lib'; do \
-      ln --symbolic "/usr/${folder}/x86_64-linux-musl" "${__BUILD_DIR__}/usr/${folder}"; \
-    done && \
-    for folder in '/tmp' "${__DATA_DIR__}"; do \
-      install --directory --owner="${__USER__}" --group="${__USER__}" --mode=1777 "${__BUILD_DIR__}${folder}"; \
-    done ; \
-  } && \
-# copy tests
-  echo '=== copying test files ===' && \
-  time { \
-    install --owner="${__USER__}" --group="${__USER__}" --mode=0755 --target-directory="${__BUILD_DIR__}/usr/bin" "${__WORK_DIR__}/tests"/* ; \
-  } && \
-# copy scripts
-  echo '=== copying script files ===' && \
-  time { \
-    install --owner="${__USER__}" --group="${__USER__}" --mode=0755 --target-directory="${__BUILD_DIR__}/usr/bin" "${__WORK_DIR__}/scripts"/* ; \
-  } && \
+  echo '--> creating build structure' && \
+  for folder in 'bin' 'sbin'; do \
+    install --directory --owner="${__USER__}" --group="${__USER__}" --mode=0755 "${__BUILD_DIR__}/usr/${folder}"; \
+    ln --symbolic "usr/${folder}" "${__BUILD_DIR__}/${folder}"; \
+  done && \
+  for folder in '/tmp' "${__DATA_DIR__}"; do \
+    install --directory --owner="${__USER__}" --group="${__USER__}" --mode=1777 "${__BUILD_DIR__}${folder}"; \
+  done && \
 # dependencies
-  echo '=== instaling dependencies ===' && \
-  time { \
-    apt-get -qq update && \
-    apt-get -qq -y -o=Dpkg::Use-Pty=0 --no-install-recommends install \
-      autoconf \
-      automake \
-      bison \
-      bzip2 \
-      ca-certificates \
-      curl \
-      file \
-      flex \
-      gcc \
-      libc-dev \
-      libtool \
-      libtool-bin \
-      make \
-      musl-tools \
-      openssl \
-      pkg-config \
-      rsync \
-      xz-utils \
-      > /dev/null 2>&1 ; \
-  } && \
+  echo '--> instaling dependencies' && \
+  dnf --assumeyes --quiet --setopt=install_weak_deps='no' install \
+    autoconf \
+    automake \
+    binutils \
+    byacc \
+    ca-certificates \
+    curl \
+    diffutils \
+    file \
+    findutils \
+    flex \
+    gcc \
+    gzip \
+    jq \
+    libtool \
+    make \
+    perl-interpreter \
+    rsync \
+    sed \
+    tar \
+    xz && \
+# copy tests
+  echo '--> copying test files' && \
+  install --owner="${__USER__}" --group="${__USER__}" --mode=0755 --target-directory="${__BUILD_DIR__}/usr/bin" "${__WORK_DIR__}/tests"/* && \
+# copy scripts
+  echo '--> copying scripts' && \
+  install --owner="${__USER__}" --group="${__USER__}" --mode=0755 --target-directory="${__BUILD_DIR__}/usr/bin" "${__WORK_DIR__}/scripts"/* && \
 # kernel headers
-  echo '=== installing kernel headers ===' && \
-  time { \
-    install --directory "${__SOURCE_DIR__}/kernel" && \
-    curl --silent --location --retry 3 "https://cdn.kernel.org/pub/linux/kernel/v${KERNEL_VERSION%%.*}.x/linux-${KERNEL_VERSION}.tar.xz" \
-      | tar xJ --no-same-owner --strip-components=1 -C "${__SOURCE_DIR__}/kernel" --wildcards "*LICENSE*" "*COPYING*" $(echo linux-*/{Makefile,arch,include,scripts,tools,usr}) && \
-    cd "${__SOURCE_DIR__}/kernel" && \
-    make INSTALL_HDR_PATH="./_headers" headers_install > /dev/null && \
-    cp --recursive './_headers/include'/*  "${__BUILD_DIR__}/usr/include" && \
-    install --directory --owner="${__USER__}" --group="${__USER__}" --mode=0755 "${__BUILD_DIR__}/licenses/linux" && \
-    find ./ -type f -a \( -name '*LICENSE*' -o -name '*COPYING*' \) -exec cp --parents {} "${__BUILD_DIR__}/licenses/linux" ';' && \
-    cd ~- && \
-    rm -rf "${__SOURCE_DIR__}/kernel" ; \
-  } && \
+  echo '--> installing kernel headers' && \
+  KERNEL_VERSION="$(curl --silent --location --retry 3 'https://www.kernel.org/releases.json' | jq -r '.latest_stable.version')" && \
+  install --directory "${__SOURCE_DIR__}/kernel" && \
+  curl --silent --location --retry 3 "https://cdn.kernel.org/pub/linux/kernel/v${KERNEL_VERSION%%.*}.x/linux-${KERNEL_VERSION}.tar.xz" \
+    | tar xJ --no-same-owner --strip-components=1 -C "${__SOURCE_DIR__}/kernel" $(echo linux-*/{Makefile,arch,include,scripts,tools,usr}) && \
+  cd "${__SOURCE_DIR__}/kernel" && \
+  make INSTALL_HDR_PATH="/usr/local" headers_install > /dev/null && \
+  cd ~- && \
+  rm -rf "${__SOURCE_DIR__}/kernel" && \
+# musl
+  echo '--> installing musl libc' && \
+  install --directory "${__SOURCE_DIR__}/musl/_build" && \
+  curl --silent --location --retry 3 "https://musl.libc.org/releases/musl-latest.tar.gz" \
+    | tar xz --no-same-owner --strip-components=1 -C "${__SOURCE_DIR__}/musl" && \
+  cd "${__SOURCE_DIR__}/musl/_build" && \
+  ../configure \
+    CFLAGS="-O2 -g0 -s -w -pipe -mtune=generic -DNDEBUG -DCLS=${DCACHE_LINESIZE}" \
+    --prefix='/usr/local' \
+    --disable-debug \
+    --disable-shared \
+    --enable-wrapper=all \
+    --enable-static \
+    > /dev/null && \
+  make > /dev/null > /dev/null && \
+  make install > /dev/null && \
+  cd ~- && \
+  rm -rf "${__SOURCE_DIR__}/musl" && \
 # zlib
-  echo '=== installing zlib ===' && \
-  time { \
-    install --directory "${__SOURCE_DIR__}/zlib/_build" && \
-    curl --silent --location --retry 3 "https://zlib.net/zlib-${ZLIB_VERSION}.tar.xz" \
-      | tar xJ --no-same-owner --strip-components=1 -C "${__SOURCE_DIR__}/zlib" && \
-    cd "${__SOURCE_DIR__}/zlib/_build" && \
-    sed -i.orig -e '/(man3dir)/d' ../Makefile.in && \
-    CC="musl-gcc -static --static --sysroot='${__BUILD_DIR__}'" \
-    ../configure \
-      --includedir='/usr/include' \
-      --libdir='/usr/lib' \
-      --prefix='/usr' \
-      --sysconfdir='/etc' \
-      --static \
-      > /dev/null && \
-    make > /dev/null && \
-    make DESTDIR="${__BUILD_DIR__}" install > /dev/null && \
-    install --directory --owner="${__USER__}" --group="${__USER__}" --mode=0755 "${__BUILD_DIR__}/licenses/zlib" && \
-    (cd .. && find ./ -type f -a \( -name '*LICENSE*' -o -name '*COPYING*' \) -exec cp --parents {} "${__BUILD_DIR__}/licenses/zlib" ';') && \
-    cd ~- && \
-    rm -rf "${__SOURCE_DIR__}/zlib" ; \
-  } && \
+  echo '--> installing zlib' && \
+  ZLIB_VERSION="$(rpm -q --qf "%{VERSION}" zlib)" && \
+  install --directory "${__SOURCE_DIR__}/zlib/_build" && \
+  curl --silent --location --retry 3 "https://zlib.net/zlib-${ZLIB_VERSION}.tar.gz" \
+    | tar xz --no-same-owner --strip-components=1 -C "${__SOURCE_DIR__}/zlib" && \
+  cd "${__SOURCE_DIR__}/zlib/_build" && \
+  sed -i.orig -e '/(man3dir)/d' ../Makefile.in && \
+  CC="musl-gcc -static --static" \
+  CFLAGS="-O2 -g0 -s -w -pipe -mtune=generic -DNDEBUG -DCLS=${DCACHE_LINESIZE}" \
+  ../configure \
+    --prefix='/usr/local' \
+    --includedir='/usr/local/include' \
+    --libdir='/usr/local/lib' \
+    --static \
+    > /dev/null && \
+  make > /dev/null && \
+  make install > /dev/null && \
+  cd ~- && \
+  rm -rf "${__SOURCE_DIR__}/zlib" && \
 # openssl
-  echo '=== installing openssl ===' && \
-  time { \
-    install --directory "${__SOURCE_DIR__}/openssl/_build" && \
-    curl --silent --location --retry 3 "https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz" \
-      | tar xz --no-same-owner --strip-components=1 -C "${__SOURCE_DIR__}/openssl" && \
-    cd "${__SOURCE_DIR__}/openssl/_build" && \
-    ../config \
-      CC="musl-gcc -static --static --sysroot='${__BUILD_DIR__}'" \
-      --libdir='/usr/lib' \
-      --openssldir='/etc/ssl' \
-      --prefix='/usr' \
-      --release \
-      --static \
-      enable-cms \
-      enable-ec_nistp_64_gcc_128 \
-      enable-rfc3779 \
-      no-comp \
-      no-shared \
-      no-ssl3 \
-      no-weak-ssl-ciphers \
-      no-zlib \
-      -pipe \
-      -static \
-      -DNDEBUG \
-      -DOPENSSL_NO_HEARTBEATS && \
-    make > /dev/null && \
-    make DESTDIR="${__BUILD_DIR__}" install_sw > /dev/null && \
-    make DESTDIR="${__BUILD_DIR__}" install_ssldirs > /dev/null && \
-    rm -rf "${__BUILD_DIR__}/etc/ssl/misc" && \
-    rm -rf "${__BUILD_DIR__}/usr/bin/c_rehash" && \
-    find "${__BUILD_DIR__}/etc" -type f -name '*.dist' -delete && \
-    install --directory --owner="${__USER__}" --group="${__USER__}" --mode=0755 "${__BUILD_DIR__}/licenses/openssl" && \
-    (cd .. && find ./ -type f -a \( -name '*LICENSE*' -o -name '*COPYING*' \) -exec cp --parents {} "${__BUILD_DIR__}/licenses/openssl" ';') && \
-    cd ~- && \
-    rm -rf "${__SOURCE_DIR__}/openssl" ; \
-  } && \
+  echo '--> installing openssl' && \
+  OPENSSL_VERSION="$(rpm -q --qf "%{VERSION}" openssl-libs)" && \
+  install --directory "${__SOURCE_DIR__}/openssl/_build" && \
+  curl --silent --location --retry 3 "https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz" \
+    | tar xz --no-same-owner --strip-components=1 -C "${__SOURCE_DIR__}/openssl" && \
+  cd "${__SOURCE_DIR__}/openssl/_build" && \
+  ../config \
+    CC="musl-gcc -static --static" \
+    --openssldir='/etc/ssl' \
+    --prefix='/usr/local' \
+    --libdir='/usr/local/lib' \
+    --release \
+    --static \
+    enable-cms \
+    enable-ec_nistp_64_gcc_128 \
+    enable-rfc3779 \
+    no-comp \
+    no-shared \
+    no-ssl3 \
+    no-weak-ssl-ciphers \
+    zlib \
+    -pipe \
+    -static \
+    -DCLS=${DCACHE_LINESIZE} \
+    -DNDEBUG \
+    -DOPENSSL_NO_HEARTBEATS \
+    -O2 -g0 -s -w -pipe -m64 -mtune=generic '-DDEVRANDOM="\"/dev/urandom\""' && \
+  make > /dev/null && \
+  make install_sw > /dev/null && \
+  make install_ssldirs > /dev/null && \
+  sed -i.orig -e '/^install_programs:/ s/install_runtime_libs//' Makefile && \
+  make DESTDIR="${__BUILD_DIR__}" BIN_SCRIPTS="" INSTALLTOP="/usr" install_programs > /dev/null && \
+  make DESTDIR="${__BUILD_DIR__}" MISC_SCRIPTS="" install_ssldirs > /dev/null && \
+  find "${__BUILD_DIR__}/etc/ssl" -type f -name '*.dist' -delete && \
+  install --directory --owner="${__USER__}" --group="${__USER__}" --mode=0755 "${__BUILD_DIR__}/licenses/openssl" && \
+  install --owner="${__USER__}" --group="${__USER__}" --mode=0644 --target-directory="${__BUILD_DIR__}/licenses/openssl" '../LICENSE' && \
+  cd ~- && \
+  rm -rf "${__SOURCE_DIR__}/openssl" && \
 # libexpat
-  echo '=== installing libexpat ===' && \
-  time { \
-    install --directory "${__SOURCE_DIR__}/libexpat/_build" && \
-    curl --silent --location --retry 3 "https://github.com/libexpat/libexpat/releases/download/R_${LIBEXPAT_VERSION//./_}/expat-${LIBEXPAT_VERSION}.tar.gz" \
-      | tar xz --no-same-owner --strip-components=1 -C "${__SOURCE_DIR__}/libexpat" && \
-    cd "${__SOURCE_DIR__}/libexpat/_build" && \
-    for file in $(find ../ -name 'Makefile.in'); do \
-      sed -i.orig \
-      -e '/^install-data-hook:/ s/:.*/:/' -e '/^install-data-hook:/,/^$/{//!d}' \
-      -e '/^doc_DATA =/ s/=.*/=/' -e '/^doc_DATA =/,/^$/{//!d}' "${file}"; \
-    done && \
-    ../configure \
-      CC="musl-gcc -static --static --sysroot='${__BUILD_DIR__}'" \
-      --quiet \
-      --includedir='/usr/include' \
-      --libdir='/usr/lib' \
-      --libexecdir='/usr/libexec' \
-      --prefix='/usr' \
-      --sysconfdir='/etc' \
-      --without-docbook \
-      --without-examples \
-      --without-tests \
-      --without-xmlwf \
-      --enable-fast-install \
-      --enable-silent-rules \
-      --enable-static \
-      --disable-shared && \
-    make > /dev/null && \
-    make DESTDIR="${__BUILD_DIR__}" install > /dev/null && \
-    install --directory --owner="${__USER__}" --group="${__USER__}" --mode=0755 "${__BUILD_DIR__}/licenses/libexpat" && \
-    (cd .. && find ./ -type f -a \( -name '*LICENSE*' -o -name '*COPYING*' \) -exec cp --parents {} "${__BUILD_DIR__}/licenses/libexpat" ';') && \
-    cd ~- && \
-    rm -rf "${__SOURCE_DIR__}/libexpat" ; \
-  } && \
+  echo '--> installing libexpat' && \
+  LIBEXPAT_URL="$(curl --silent --location --retry 3 'https://api.github.com/repos/libexpat/libexpat/releases/latest' | jq -r '.assets[] | select(.content_type=="application/gzip") | .browser_download_url')" && \
+  install --directory "${__SOURCE_DIR__}/libexpat/_build" && \
+  curl --silent --location --retry 3 "${LIBEXPAT_URL}" \
+    | tar xz --no-same-owner --strip-components=1 -C "${__SOURCE_DIR__}/libexpat" && \
+  cd "${__SOURCE_DIR__}/libexpat/_build" && \
+  for file in $(find ../ -name 'Makefile.in'); do \
+    sed -i.orig \
+    -e '/^install-data-hook:/ s/:.*/:/' -e '/^install-data-hook:/,/^$/{//!d}' \
+    -e '/^doc_DATA =/ s/=.*/=/' -e '/^doc_DATA =/,/^$/{//!d}' "${file}"; \
+  done && \
+  ../configure \
+    CC="musl-gcc -static --static" \
+    CFLAGS="-O2 -g0 -s -w -pipe -mtune=generic -DNDEBUG -DCLS=${DCACHE_LINESIZE}" \
+    --quiet \
+    --prefix='/usr/local' \
+    --includedir='/usr/local/include' \
+    --libdir='/usr/local/lib' \
+    --sysconfdir='/etc' \
+    --without-docbook \
+    --without-examples \
+    --without-tests \
+    --without-xmlwf \
+    --enable-fast-install \
+    --enable-silent-rules \
+    --enable-static \
+    --disable-shared && \
+  make > /dev/null && \
+  make install > /dev/null && \
+  cd ~- && \
+  rm -rf "${__SOURCE_DIR__}/libexpat" ; \
 # libevent
-  echo '=== installing libevent ===' && \
-  time { \
-    install --directory "${__SOURCE_DIR__}/libevent/_build" && \
-    curl --silent --location --retry 3 "https://github.com/libevent/libevent/releases/download/release-${LIBEVENT_VERSION}-stable/libevent-${LIBEVENT_VERSION}-stable.tar.gz" \
-      | tar xz --no-same-owner --strip-components=1 -C "${__SOURCE_DIR__}/libevent" && \
-    cd "${__SOURCE_DIR__}/libevent/_build" && \
-    ../configure \
-      CC="musl-gcc -static --static --sysroot='${__BUILD_DIR__}'" \
-      --quiet \
-      --includedir='/usr/include' \
-      --libdir='/usr/lib' \
-      --libexecdir='/usr/libexec' \
-      --prefix='/usr' \
-      --sysconfdir='/etc' \
-      --enable-fast-install \
-      --enable-silent-rules \
-      --enable-static \
-      --disable-debug-mode \
-      --disable-doxygen-html \
-      --disable-samples \
-      --disable-shared && \
-    make > /dev/null && \
-    make DESTDIR="${__BUILD_DIR__}" install > /dev/null && \
-    rm -rf "${__BUILD_DIR__}/usr/bin/event_rpcgen.py" && \
-    install --directory --owner="${__USER__}" --group="${__USER__}" --mode=0755 "${__BUILD_DIR__}/licenses/libevent" && \
-    (cd .. && find ./ -type f -a \( -name '*LICENSE*' -o -name '*COPYING*' \) -exec cp --parents {} "${__BUILD_DIR__}/licenses/libevent" ';') && \
-    cd ~- && \
-    rm -rf "${__SOURCE_DIR__}/libevent" ; \
-  } && \
+  echo '--> installing libevent' && \
+  LIBEVENT_URL="$(curl --silent --location --retry 3 'https://api.github.com/repos/libevent/libevent/releases/latest' | jq -r '.assets[] | select(.content_type=="application/gzip") | .browser_download_url')" && \
+  install --directory "${__SOURCE_DIR__}/libevent/_build" && \
+  curl --silent --location --retry 3 "${LIBEVENT_URL}" \
+    | tar xz --no-same-owner --strip-components=1 -C "${__SOURCE_DIR__}/libevent" && \
+  cd "${__SOURCE_DIR__}/libevent/_build" && \
+  ../configure \
+    CC="musl-gcc -static --static" \
+    CFLAGS="-O2 -g0 -s -w -pipe -mtune=generic -DNDEBUG -DCLS=${DCACHE_LINESIZE}" \
+    --quiet \
+    --prefix='/usr/local' \
+    --includedir='/usr/local/include' \
+    --libdir='/usr/local/lib' \
+    --sysconfdir='/etc' \
+    --enable-fast-install \
+    --enable-silent-rules \
+    --enable-static \
+    --disable-debug-mode \
+    --disable-doxygen-html \
+    --disable-samples \
+    --disable-shared && \
+  make > /dev/null && \
+  make install > /dev/null && \
+  cd ~- && \
+  rm -rf "${__SOURCE_DIR__}/libevent" && \
 # libuv
-  echo '=== installing libuv ===' && \
-  time { \
-    install --directory "${__SOURCE_DIR__}/libuv/_build" && \
-    curl --silent --location --retry 3 "https://dist.libuv.org/dist/v${LIBUV_VERSION}/libuv-v${LIBUV_VERSION}.tar.gz" \
-      | tar xz --no-same-owner --strip-components=1 -C "${__SOURCE_DIR__}/libuv" && \
-    cd "${__SOURCE_DIR__}/libuv/_build" && \
-    ../autogen.sh && \
-    ../configure \
-      CC="musl-gcc -static --static --sysroot='${__BUILD_DIR__}'" \
-      --quiet \
-      --includedir='/usr/include' \
-      --libdir='/usr/lib' \
-      --libexecdir='/usr/libexec' \
-      --prefix='/usr' \
-      --sysconfdir='/etc' \
-      --enable-fast-install \
-      --enable-silent-rules \
-      --enable-static \
-      --disable-shared && \
-    make > /dev/null && \
-    make DESTDIR="${__BUILD_DIR__}" install > /dev/null && \
-    install --directory --owner="${__USER__}" --group="${__USER__}" --mode=0755 "${__BUILD_DIR__}/licenses/libuv" && \
-    (cd .. && find ./ -type f -a \( -name '*LICENSE*' -o -name '*COPYING*' \) -exec cp --parents {} "${__BUILD_DIR__}/licenses/libuv" ';') && \
-    cd ~- && \
-    rm -rf "${__SOURCE_DIR__}/libuv" ; \
-  } && \
-# zlib
-  echo '=== installing zlib ===' && \
-  time { \
-    install --directory "${__SOURCE_DIR__}/zlib/_build" && \
-    curl --silent --location --retry 3 "https://zlib.net/zlib-${ZLIB_VERSION}.tar.xz" \
-      | tar xJ --no-same-owner --strip-components=1 -C "${__SOURCE_DIR__}/zlib" && \
-    cd "${__SOURCE_DIR__}/zlib/_build" && \
-    sed -i.orig -e '/(man3dir)/d' ../Makefile.in && \
-    CC="musl-gcc -static --static --sysroot='${__BUILD_DIR__}'" \
-    ../configure \
-      --includedir='/usr/include' \
-      --libdir='/usr/lib' \
-      --prefix='/usr' \
-      --sysconfdir='/etc' \
-      --static \
-      > /dev/null && \
-    make > /dev/null && \
-    make DESTDIR="${__BUILD_DIR__}" install > /dev/null && \
-    install --directory --owner="${__USER__}" --group="${__USER__}" --mode=0755 "${__BUILD_DIR__}/licenses/zlib" && \
-    (cd .. && find ./ -type f -a \( -name '*LICENSE*' -o -name '*COPYING*' \) -exec cp --parents {} "${__BUILD_DIR__}/licenses/zlib" ';') && \
-    cd ~- && \
-    rm -rf "${__SOURCE_DIR__}/zlib" ; \
-  } && \
-\
+  echo '--> installing libuv' && \
+  LIBUV_URL="$(curl --silent --location --retry 3 'https://api.github.com/repos/libuv/libuv/releases/latest' | jq -r '.tarball_url')" && \
+  install --directory "${__SOURCE_DIR__}/libuv/_build" && \
+  curl --silent --location --retry 3 "${LIBUV_URL}" \
+    | tar xz --no-same-owner --strip-components=1 -C "${__SOURCE_DIR__}/libuv" && \
+  cd "${__SOURCE_DIR__}/libuv/_build" && \
+  ../autogen.sh && \
+  ../configure \
+    CC="musl-gcc -static --static" \
+    CFLAGS="-O2 -g0 -s -w -pipe -mtune=generic -DNDEBUG -DCLS=${DCACHE_LINESIZE}" \
+    --quiet \
+    --prefix='/usr/local' \
+    --includedir='/usr/local/include' \
+    --libdir='/usr/local/lib' \
+    --libexecdir='/usr/local/libexec' \
+    --sysconfdir='/etc' \
+    --enable-fast-install \
+    --enable-silent-rules \
+    --enable-static \
+    --disable-shared && \
+  make > /dev/null && \
+  make install > /dev/null && \
+  cd ~- && \
+  rm -rf "${__SOURCE_DIR__}/libuv" && \
 # bind utilities
-  echo '=== installing bind utilities ===' && \
-  time { \
-    install --directory "${__SOURCE_DIR__}/bind/_build" && \
-    curl --silent --location --retry 3 "https://downloads.isc.org/isc/bind${BIND_VERSION%%.*}/${BIND_VERSION}/bind-${BIND_VERSION}.tar.xz" \
-      | tar xJ --no-same-owner --strip-components=1 -C "${__SOURCE_DIR__}/bind" && \
-    cd "${__SOURCE_DIR__}/bind/_build" && \
-    ../configure \
-      CC="musl-gcc -static --static --sysroot='${__BUILD_DIR__}'" \
-      --quiet \
-      --includedir='/usr/include' \
-      --libdir='/usr/lib' \
-      --libexecdir='/usr/libexec' \
-      --localstatedir='/tmp' \
-      --prefix='/usr' \
-      --with-zlib \
-      --without-cmocka \
-      --enable-developer \
-      --enable-ltdl-install \
-      --enable-mutex-atomics \
-      --enable-shared \
-      --enable-static \
-      --disable-linux-caps && \
-    for target in ./libltdl ./lib/{isc,dns,isccfg,irs,ns,bind${BIND_VERSION%%.*}} ./bin/dig; do \
-      make --directory="${target}" > /dev/null; \
-    done && \
-    make --directory='bin/dig' DESTDIR="${__BUILD_DIR__}" MANPAGES="" install > /dev/null && \
-    install --directory --owner="${__USER__}" --group="${__USER__}" --mode=0755 "${__BUILD_DIR__}/licenses/bind" && \
-    (cd .. && find ./ -type f -a \( -name '*LICENSE*' -o -name '*COPYING*' \) -exec cp --parents {} "${__BUILD_DIR__}/licenses/bind" ';') && \
-    cd ~- && \
-    rm -rf "${__SOURCE_DIR__}/bind" ; \
-  } && \
+  echo '--> installing bind utilities' && \
+  BIND_VERSION="9.16.19" && \
+  install --directory "${__SOURCE_DIR__}/bind/_build" && \
+  curl --silent --location --retry 3 "https://downloads.isc.org/isc/bind${BIND_VERSION%%.*}/${BIND_VERSION}/bind-${BIND_VERSION}.tar.xz" \
+    | tar xJ --no-same-owner --strip-components=1 -C "${__SOURCE_DIR__}/bind" && \
+  cd "${__SOURCE_DIR__}/bind/_build" && \
+  ../configure \
+    CC="musl-gcc -static --static" \
+    CFLAGS="-O2 -g0 -s -w -pipe -mtune=generic -DNDEBUG -DCLS=${DCACHE_LINESIZE}" \
+    --quiet \
+    --prefix='/usr' \
+    --localstatedir='/tmp' \
+    --sysconfdir='/etc' \
+    --with-zlib \
+    --without-cmocka \
+    --without-python \
+    --enable-developer \
+    --enable-mutex-atomics \
+    --enable-static \
+    --disable-linux-caps \
+    --disable-shared && \
+  for target in ./lib/{isc,dns,isccfg,irs,ns,bind${BIND_VERSION%%.*}} ./bin/dig; do \
+    make --directory="${target}" > /dev/null; \
+  done && \
+  make --directory='bin/dig' DESTDIR="${__BUILD_DIR__}" MANPAGES="" install > /dev/null && \
+  install --directory --owner="${__USER__}" --group="${__USER__}" --mode=0755 "${__BUILD_DIR__}/licenses/bind" && \
+  install --owner="${__USER__}" --group="${__USER__}" --mode=0644 --target-directory="${__BUILD_DIR__}/licenses/bind" '../LICENSE' && \
+  cd ~- && \
+  rm -rf "${__SOURCE_DIR__}/bind" && \
 # unbound
-  echo '=== installing unbound ===' && \
-  time { \
-    install --directory "${__SOURCE_DIR__}/unbound/_build" && \
-    curl --silent --location --retry 3 "https://nlnetlabs.nl/downloads/unbound/unbound-${UNBOUND_VERSION}.tar.gz" \
-      | tar xz --no-same-owner --strip-components=1 -C "${__SOURCE_DIR__}/unbound" && \
-    cd "${__SOURCE_DIR__}/unbound/_build" && \
-    for file in $(find ../ -name 'Makefile.in'); do \
-      sed -i.orig \
-        -e '/for mpage in/,/done/d' \
-        -e '/INSTALL.*-[cd].*mandir/d' "${file}"; \
-    done && \
-    ../configure \
-      CC="musl-gcc -static --static --sysroot='${__BUILD_DIR__}'" \
-      --quiet \
-      --includedir='/usr/include' \
-      --libdir='/usr/lib' \
-      --libexecdir='/usr/libexec' \
-      --prefix='/usr' \
-      --sysconfdir="${__DATA_DIR__}" \
-      --with-chroot-dir="" \
-      --with-libevent="${__BUILD_DIR__}/usr" \
-      --with-libexpat="${__BUILD_DIR__}/usr" \
-      --with-pidfile="/tmp/unbound.pid" \
-      --with-pthreads \
-      --with-rootkey-file="${__UNBOUND_DATA_DIR__}/root.key" \
-      #--with-run-dir="" \
-      --with-ssl="${__BUILD_DIR__}/usr" \
-      --without-pythonmodule \
-      --without-pyunbound \
-      --enable-event-api \
-      --enable-fast-install \
-      --enable-static \
-      --enable-subnet \
-      --enable-tfo-client \
-      --enable-tfo-server \
-      --disable-dnstap \
-      --disable-shared && \
-    make > /dev/null && \
-    make DESTDIR="${__BUILD_DIR__}" install > /dev/null && \
-    rm -rf "${__BUILD_DIR__}${__DATA_DIR__}"/* && \
-    install --directory --owner="${__USER__}" --group="${__USER__}" --mode=0755 "${__BUILD_DIR__}/licenses/unbound" && \
-    (cd .. && find ./ -type f -a \( -name '*LICENSE*' -o -name '*COPYING*' \) -exec cp --parents {} "${__BUILD_DIR__}/licenses/unbound" ';') && \
-    cd ~- && \
-    rm -rf "${__SOURCE_DIR__}/unbound" ; \
-  } && \
+  echo '--> installing unbound' && \
+  install --directory "${__SOURCE_DIR__}/unbound/_build" && \
+  curl --silent --location --retry 3 "https://nlnetlabs.nl/downloads/unbound/unbound-${UNBOUND_VERSION}.tar.gz" \
+    | tar xz --no-same-owner --strip-components=1 -C "${__SOURCE_DIR__}/unbound" && \
+  cd "${__SOURCE_DIR__}/unbound/_build" && \
+  for file in $(find ../ -name 'Makefile.in'); do \
+    sed -i.orig \
+      -e '/for mpage in/,/done/d' \
+      -e '/INSTALL.*-[cd].*mandir/d' \
+      -e '/INSTALL.*DESTDIR.*pkgconfig/d' \
+      -e '/^install-all/s/:.*/:\tall/' "${file}"; \
+  done && \
+  ../configure \
+    CC="musl-gcc -static --static" \
+    CFLAGS="-O2 -g0 -s -w -pipe -mtune=generic -DNDEBUG -DCLS=${DCACHE_LINESIZE}" \
+    --quiet \
+    --prefix='/usr' \
+    --libdir='/usr/lib' \
+    --libexecdir='/usr/libexec' \
+    --sysconfdir="${__DATA_DIR__}" \
+    --with-chroot-dir="" \
+    --with-pidfile="/tmp/unbound.pid" \
+    --with-pthreads \
+    --with-rootkey-file="${__DATA_DIR__}/unbound/root.key" \
+    #--with-run-dir="" \
+    --without-pythonmodule \
+    --without-pyunbound \
+    --enable-event-api \
+    --enable-fast-install \
+    --enable-static \
+    --enable-subnet \
+    --enable-tfo-client \
+    --enable-tfo-server \
+    --disable-dnstap \
+    --disable-shared && \
+  _config_file_="/etc$(cat Makefile | sed -n -e "/^configfile=/ s|.*=${__DATA_DIR__}\(.*\)|\1|p")" && \
+  make > /dev/null && \
+  make DESTDIR="${__BUILD_DIR__}" configfile="${_config_file_}" install > /dev/null && \
+  install --directory --owner="${__USER__}" --group="${__USER__}" --mode=0755 "${__BUILD_DIR__}/licenses/unbound" && \
+  install --owner="${__USER__}" --group="${__USER__}" --mode=0644 --target-directory="${__BUILD_DIR__}/licenses/unbound" '../LICENSE' && \
+  cd ~- && \
+  rm -rf "${__SOURCE_DIR__}/unbound" && \
 # busybox
-  echo '=== installing busybox ===' && \
-  time { \
-    install --owner="${__USER__}" --group="${__USER__}" --mode=0755 --target-directory="${__BUILD_DIR__}/usr/bin" "${__WORK_DIR__}/busybox" && \
-    install --directory --owner="${__USER__}" --group="${__USER__}" --mode=0755 "${__BUILD_DIR__}/licenses/busybox" && \
-    curl --silent --location --retry 3 "https://busybox.net/downloads/busybox-$(${__BUILD_DIR__}/usr/bin/busybox --help | head -1 | sed -E -n -e 's/.*v([0-9\.]+) .*/\1/p').tar.bz2" \
-      | tar xj --no-same-owner --strip-components=1 -C "${__BUILD_DIR__}/licenses/busybox" --wildcards '*LICENSE*' && \
-    for p in [ awk basename bc cat chmod cp date diff getopt grep ip mkdir nproc printf rm sed sh test; do \
-      ln "${__BUILD_DIR__}/usr/bin/busybox" "${__BUILD_DIR__}/$(${__BUILD_DIR__}/usr/bin/busybox --list-full | sed 's/$/ /' | grep -F "/${p} " | sed 's/ $//')"; \
-    done ; \
-  } && \
+  echo '--> installing busybox' && \
+  install --owner="${__USER__}" --group="${__USER__}" --mode=0755 --target-directory="${__BUILD_DIR__}/usr/bin" "${__WORK_DIR__}/busybox" && \
+  install --directory --owner="${__USER__}" --group="${__USER__}" --mode=0755 "${__BUILD_DIR__}/licenses/busybox" && \
+  curl --silent --location --retry 3 "https://git.busybox.net/busybox/plain/LICENSE" --output "${__BUILD_DIR__}/licenses/busybox/LICENSE" && \
+  for p in [ awk basename bc cat chmod cp date diff getopt grep ip mkdir nproc printf rm sed sh test; do \
+    p_path="$(${__WORK_DIR__}/busybox --list-full | sed 's/$/ /' | grep -F "/${p} "  | sed -e '/^usr/! s|^|usr/|' -e 's/ $//')"; \
+    ln "${__BUILD_DIR__}/usr/bin/busybox" "${__BUILD_DIR__}/${p_path}"; \
+  done && \
 # mozilla root certificates
-  echo '=== installing root certificates ===' && \
-  time { \
-    install --directory "${__SOURCE_DIR__}/certificates/certs" && \
-    curl --silent --location --retry 3 "https://github.com/mozilla/gecko-dev/raw/master/security/nss/lib/ckfw/builtins/certdata.txt" \
-      --output "${__SOURCE_DIR__}/certificates/certdata.txt" && \
-    cd "${__SOURCE_DIR__}/certificates" && \
-    for cert in $(sed -n -e '/^# Certificate/=' "${__SOURCE_DIR__}/certificates/certdata.txt"); do \
-      awk "NR==${cert},/^CKA_TRUST_STEP_UP_APPROVED/" "${__SOURCE_DIR__}/certificates/certdata.txt" > "${__SOURCE_DIR__}/certificates/certs/${cert}.tmp"; \
-    done && \
-    for file in "${__SOURCE_DIR__}/certificates/certs/"*.tmp; do \
-      _cert_name_=$(sed -n -e '/^# Certificate/{s/ /_/g;s/.*"\(.*\)".*/\1/p}' "${file}"); \
-      printf '%b' $(awk '/^CKA_VALUE/{flag=1;next}/^END/{flag=0}flag{printf $0}' "${file}") \
-        | openssl x509 -inform DER -outform PEM -out "${__SOURCE_DIR__}/certificates/certs/${_cert_name_}.pem"; \
-    done && \
-    install --owner="${__USER__}" --group="${__USER__}" --mode=0644 --target-directory="${__BUILD_DIR__}/etc/ssl/certs" "${__SOURCE_DIR__}/certificates/certs"/*.pem && \
-    c_rehash "${__BUILD_DIR__}/etc/ssl/certs" && \
-    cat "${__SOURCE_DIR__}/certificates/certs"/*.pem > "${__BUILD_DIR__}/etc/ssl/certs/ca-certificates.crt" && \
-    install --directory --owner="${__USER__}" --group="${__USER__}" --mode=0755 "${__BUILD_DIR__}/licenses/mozilla/certificates" && \
-    curl --silent --location --retry 3 "https://raw.githubusercontent.com/spdx/license-list-data/master/text/MPL-2.0.txt" \
-      --output "${__BUILD_DIR__}/licenses/mozilla/certificates/MPL-2.0" && \
-    cd ~- && \
-    rm -rf "${__SOURCE_DIR__}/certificates" ; \
-  } && \
+  echo '--> installing root certificates' && \
+  install --directory "${__SOURCE_DIR__}/certificates/certs" && \
+  curl --silent --location --retry 3 "https://github.com/mozilla/gecko-dev/raw/master/security/nss/lib/ckfw/builtins/certdata.txt" \
+    --output "${__SOURCE_DIR__}/certificates/certdata.txt" && \
+  cd "${__SOURCE_DIR__}/certificates" && \
+  for cert in $(sed -n -e '/^# Certificate/=' "${__SOURCE_DIR__}/certificates/certdata.txt"); do \
+    awk "NR==${cert},/^CKA_TRUST_STEP_UP_APPROVED/" "${__SOURCE_DIR__}/certificates/certdata.txt" > "${__SOURCE_DIR__}/certificates/certs/${cert}.tmp"; \
+  done && \
+  for file in "${__SOURCE_DIR__}/certificates/certs/"*.tmp; do \
+    _cert_name_=$(sed -n -e '/^# Certificate/{s/.*"\(.*\)".*/\1/p}' "${file}"); \
+    _cert_file_=${_cert_name_// /_}; \
+    echo "# ${_cert_name_}" >> "${__SOURCE_DIR__}/certificates/certs/ca-bundle.crt" && \
+    printf $(awk '/^CKA_VALUE/{flag=1;next}/^END/{flag=0}flag{printf $0}' "${file}") \
+      | openssl x509 -inform DER -outform PEM \
+      | tee -a "${__SOURCE_DIR__}/certificates/ca-bundle.crt" \
+      > "${__SOURCE_DIR__}/certificates/certs/${_cert_file_}.crt"; \
+  done && \
+  install --directory --owner="${__USER__}" --group="${__USER__}" --mode=0755 "${__BUILD_DIR__}/etc/ssl/certs" && \
+  install --owner="${__USER__}" --group="${__USER__}" --mode=0644 --target-directory="${__BUILD_DIR__}/etc/ssl/certs" "${__SOURCE_DIR__}/certificates/certs"/*.crt && \
+  c_rehash "${__BUILD_DIR__}/etc/ssl/certs" && \
+  install --owner="${__USER__}" --group="${__USER__}" --mode=0644 --target-directory="${__BUILD_DIR__}/etc/ssl/certs" "${__SOURCE_DIR__}/certificates/ca-bundle.crt" && \
+  install --directory --owner="${__USER__}" --group="${__USER__}" --mode=0755 "${__BUILD_DIR__}/licenses/mozilla/certificates" && \
+  curl --silent --location --retry 3 "https://raw.githubusercontent.com/spdx/license-list-data/master/text/MPL-2.0.txt" \
+    --output "${__BUILD_DIR__}/licenses/mozilla/certificates/MPL-2.0" && \
+  cd ~- && \
+  rm -rf "${__SOURCE_DIR__}/certificates" && \
 # stripping
-  echo '=== stripping binaries ===' && \
-  time { \
-    find "${__BUILD_DIR__}/usr/bin" "${__BUILD_DIR__}/usr/sbin" -type f -not -links +1 -exec strip --strip-all {} ';' ; \
-  } && \
+#   echo '--> stripping binaries' && \
+#   find "${__BUILD_DIR__}"/usr/{,s}bin -type f -not -links +1 -exec strip --strip-all {} ';' && \
+#   strip --strip-all "${__BUILD_DIR__}"/usr/bin/busybox && \
 # cleanup
-  echo '=== cleaning up ===' && \
-  time { \
-    rm -rf "${__BUILD_DIR__}/usr/lib" "${__BUILD_DIR__}/usr/include" ; \
-  } && \
+#   echo '=== cleaning up ===' && \
+#   time { \
+#     rm -rf "${__BUILD_DIR__}/usr/lib" "${__BUILD_DIR__}/usr/include" ; \
+#   } && \
 # licenses
-  echo '=== project licenses ===' && \
-  time { \
-    install --owner="${__USER__}" --group="${__USER__}" --mode=0644 --target-directory="${__BUILD_DIR__}/licenses" "${__WORK_DIR__}/LICENSE" ; \
-  } && \
-# system settings
-  echo '=== system settings ===' && \
-  time { \
-    install --directory --owner="${__USER__}" --group="${__USER__}" --mode=0755 "${__BUILD_DIR__}/run/systemd" && \
-    echo 'docker' > "${__BUILD_DIR__}/run/systemd/container" ; \
-  } && \
+  echo '--> project licenses' && \
+  install --owner="${__USER__}" --group="${__USER__}" --mode=0644 --target-directory="${__BUILD_DIR__}/licenses" "${__WORK_DIR__}/LICENSE" && \
 # done
-  echo '=== all done! ==='
+  echo '--> all done!'
 
 
 
@@ -429,7 +372,6 @@ FROM scratch
 
 ARG __BUILD_DIR__
 ARG __DATA_DIR__
-ARG __UNBOUND_DATA_DIR__
 
 LABEL \
   maintainer="Frederico Martins <https://hub.docker.com/u/fscm/>" \
@@ -448,7 +390,7 @@ VOLUME ["${__DATA_DIR__}"]
 WORKDIR "${__DATA_DIR__}"
 
 ENV \
-  UNBOUND_DATA_DIR="${__UNBOUND_DATA_DIR__}"
+  DATA_DIR="${__DATA_DIR__}"
 
 HEALTHCHECK \
   --interval=30s \
